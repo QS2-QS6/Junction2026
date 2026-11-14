@@ -111,7 +111,7 @@
       <label><input type="checkbox" id="invRoll"> invert wrist twist</label>
     </div>
     <div class="controls" id="controls"></div>
-    <div class="help">Left hand: hold a finger count to open that setting, tilt the hand up / down to move through it, then close the fist to select. Holding a different count instead switches to that setting without saving. Variation and sus go back to a plain triad on every new chord. You can also click any option.</div>
+    <div class="help">Left hand: hold a finger count to open that setting, tilt the hand up / down to move through it, then close the fist to select. Volume and tempo are heard as you move; pattern, sound and variation only change on the fist. In Pattern, twisting the wrist left / right sets how many octaves an arpeggio spans (1 / 3; centred = 2); in Variation it picks sus2 / sus4. Holding a different count instead switches to that setting without saving. Variation and sus go back to a plain triad on every new chord. You can also click any option.</div>
   </div>
 
   <h2>Right hand: chords</h2>
@@ -259,7 +259,7 @@ const DEFAULTS = {
   countMap: [1, 2, 3, 4, 5],        // right hand: 1..5 extended fingers -> degree
   comboMap: {},                     // combo id -> degree (overrides the combo's default; 0 = stop)
   cal: { right: CAL0(), left: CAL0() },
-  volume: 0.7, tempo: 100, pattern: "sustain", instrument: "mix", variation: "triad", sus: 0,
+  volume: 0.7, tempo: 100, pattern: "sustain", instrument: "mix", variation: "triad", sus: 0, span: 2,
   swap: false, invTilt: false, invRoll: false,
 };
 let S = DEFAULTS;
@@ -282,62 +282,131 @@ const INSTRUMENTS = [
 const CONTROLS = [
   { key: "volume", label: "Volume", type: "range", min: 0, max: 1, perDeg: 1 / 60, fmt: v => Math.round(v * 100) + "%", ends: ["louder", "quieter"] },
   { key: "tempo", label: "Tempo", type: "range", min: 40, max: 200, perDeg: 160 / 60, fmt: v => Math.round(v) + " bpm", ends: ["faster", "slower"] },
-  { key: "pattern", label: "Pattern", type: "list", options: PATTERNS },
+  { key: "pattern", label: "Pattern", type: "list", options: PATTERNS,
+    twist: { key: "span", left: 1, centre: 2, right: 3, labels: ["‹ 1 oct", "2 oct", "3 oct ›"] } },
   { key: "instrument", label: "Sound", type: "list", options: INSTRUMENTS },
-  { key: "variation", label: "Variation", type: "list", options: VARIATIONS, sus: true },
+  { key: "variation", label: "Variation", type: "list", options: VARIATIONS,
+    twist: { key: "sus", left: 2, centre: 0, right: 4, labels: ["‹ sus2", "normal", "sus4 ›"] } },
 ];
+// `twist`: a second choice made by rotating the wrist while the menu is open (centred = `centre`).
+const ARPS = ["down", "up", "updown"];   // patterns that use the octave span
 const STEP_DEG = 14;                  // hand tilt per list step
 let menu = null;                      // open setting: { i, key, hover, pose0, hist, matching }
 let ctlDirty = true;
-/** Setting value in effect: the one being hovered in an open menu is previewed live. */
-const eff = k => (menu && k in menu.hover) ? menu.hover[k] : S[k];
+/** What the open menu is pointing at for setting `k` (the saved value if it isn't open). */
+const hov = k => (menu && k in menu.hover) ? menu.hover[k] : S[k];
+/** Setting value in effect. Volume and tempo are heard while you move; everything else only changes on the fist. */
+const LIVE_PREVIEW = ["volume", "tempo"];
+const eff = k => LIVE_PREVIEW.includes(k) ? hov(k) : S[k];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const chordFor = deg => buildChord(S.root, S.scale, deg - 1, eff("variation"), eff("sus"));
 
 // ── Synth (Web Audio) ─────────────────────────────────────────────────────
-let actx = null, master = null, pianoWave = null;
-const masterGain = () => { const v = eff("volume"); return v * v * 0.6; };
+let actx = null, master = null, pianoWave = null, pianoHiWave = null, noiseBuf = null;
+const reverbSend = {};                // instrument -> gain node feeding the reverb
+const masterGain = () => { const v = eff("volume"); return v * v * 0.45; };
 function startAudio() {
   if (actx) { actx.resume(); return; }
   actx = new AudioContext();
+  // Output: volume -> gentle compressor -> soft clipper, so loud chords round off instead of crackling.
   const comp = actx.createDynamicsCompressor();
+  comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 6; comp.attack.value = 0.005; comp.release.value = 0.2;
+  const soft = actx.createWaveShaper();
+  soft.curve = Float32Array.from({ length: 1025 }, (_, i) => Math.tanh((i - 512) / 512 * 1.5) / Math.tanh(1.5) * 0.95);
+  soft.oversample = "2x";
   master = actx.createGain(); master.gain.value = masterGain();
-  master.connect(comp).connect(actx.destination);
-  const amps = [0, 1, .55, .3, .2, .12, .09, .06, .045, .03, .02, .015, .01];
+  master.connect(comp).connect(soft).connect(actx.destination);
+
+  // Room: a generated impulse response (2.6 s of decaying, progressively darker noise).
+  const sr = actx.sampleRate, len = Math.floor(sr * 2.6), ir = actx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    let y = 0;
+    for (let i = Math.floor(sr * 0.012); i < len; i++) {
+      const x = (Math.random() * 2 - 1) * Math.exp(-4.2 * i / len);
+      y += (x - y) * (0.5 - 0.35 * i / len);
+      d[i] = y;
+    }
+  }
+  const reverb = actx.createConvolver(); reverb.buffer = ir; reverb.connect(master);
+  for (const [inst, amount] of [["piano", 0.5], ["strings", 0.3]]) {
+    reverbSend[inst] = actx.createGain(); reverbSend[inst].gain.value = amount; reverbSend[inst].connect(reverb);
+  }
+
+  // Piano string spectrum, and its upper partials on their own (they are tuned sharp and die first).
+  const amps = [0, 1, .62, .38, .27, .2, .13, .1, .075, .055, .04, .03, .022, .016, .012, .009, .007];
   pianoWave = actx.createPeriodicWave(new Float32Array(amps.length), new Float32Array(amps));
+  pianoHiWave = actx.createPeriodicWave(new Float32Array(amps.length), new Float32Array(amps.map((a, n) => n >= 5 ? a * 3 : 0)));
+  noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.08), sr);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
 }
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
 /**
  * One note. `dur` = seconds until release, or null to hold (strings) / ring out (piano).
- * Strings: two detuned saws through a low-pass. Piano: struck, decaying tone that darkens as it fades.
+ * Strings: an ensemble of detuned saws through a low-pass.
+ * Piano: three slightly mistuned strings per key (their beating gives the tone its movement), sharp upper
+ * partials that fade first, a hammer thump, a fast initial drop followed by a long tail, and room reverb.
  */
 const live = new Set();
+// Strings ensemble voices: [detune in cents, pan, level, octave]. Levels add up to about two plain saws.
+const ENSEMBLE = [[-14, -0.7, 0.4, 0], [-5, 0.3, 0.45, 0], [4, -0.3, 0.45, 0], [13, 0.7, 0.4, 0], [-7, 0.5, 0.15, 1], [8, -0.5, 0.15, 1]];
 function note(inst, m, t, vel, dur, cutoff = 2400) {
   const f = mtof(m), g = actx.createGain(), lp = actx.createBiquadFilter();
-  lp.type = "lowpass"; g.connect(lp).connect(master);
+  lp.type = "lowpass"; g.connect(lp);
   g.gain.setValueAtTime(0, t);
-  const oscs = [];
-  let end = null;
+  const srcs = [];                       // everything that has to be started and stopped
+  let end = null, out = lp;
   if (inst === "piano") {
-    const tc = 0.9 * Math.pow(2, (60 - m) / 24);           // low notes ring longer
-    lp.Q.value = 0.3;
-    lp.frequency.setValueAtTime(Math.min(10000, f * 7 + 600), t);
-    lp.frequency.setTargetAtTime(f * 2 + 250, t, tc * 0.5);
-    g.gain.linearRampToValueAtTime(vel * 1.6, t + 0.005);
-    g.gain.setTargetAtTime(0, t + 0.005, tc);
-    end = t + Math.min(6, tc * 5);
-    for (const det of [-2, 2]) { const o = actx.createOscillator(); o.setPeriodicWave(pianoWave); o.detune.value = det; oscs.push(o); }
+    const tail = Math.min(5, 1.7 * Math.pow(2, (60 - m) / 20));       // low notes ring longer
+    const peak = vel * 1.5;
+    lp.Q.value = 0.2;
+    lp.frequency.setValueAtTime(Math.min(12000, f * 10 + 1500), t);    // bright at the strike, mellow as it rings
+    lp.frequency.setTargetAtTime(f * 2.5 + 400, t, 0.25 + tail * 0.2);
+    g.gain.linearRampToValueAtTime(peak, t + 0.004);
+    g.gain.setTargetAtTime(peak * 0.45, t + 0.004, 0.09);
+    g.gain.setTargetAtTime(0, t + 0.3, tail);
+    end = t + Math.min(8, 0.3 + tail * 4.5);
+    for (const [det, level] of [[-3, 0.4], [0.5, 0.45], [3.5, 0.35]]) {
+      const o = actx.createOscillator(), og = actx.createGain();
+      o.setPeriodicWave(pianoWave); o.frequency.value = f; o.detune.value = det; og.gain.value = level;
+      o.connect(og).connect(g); srcs.push(o);
+    }
+    const hi = actx.createOscillator(), hg = actx.createGain();
+    hi.setPeriodicWave(pianoHiWave); hi.frequency.value = f; hi.detune.value = 9 + Math.max(0, m - 48) * 0.25;
+    hg.gain.setValueAtTime(0.5, t); hg.gain.setTargetAtTime(0, t, 0.18);
+    hi.connect(hg).connect(g); srcs.push(hi);
+    const thump = actx.createBufferSource(), bp = actx.createBiquadFilter(), tg = actx.createGain();
+    thump.buffer = noiseBuf; bp.type = "bandpass"; bp.frequency.value = Math.min(4500, f * 3 + 300); bp.Q.value = 0.8;
+    tg.gain.setValueAtTime(vel * 0.9, t); tg.gain.setTargetAtTime(0, t, 0.012);
+    thump.connect(bp).connect(tg).connect(lp); srcs.push(thump);
+    out = actx.createStereoPanner(); out.pan.value = clamp((m - 60) / 45, -0.6, 0.6);   // bass left, treble right
+    lp.connect(out);
   } else {
     lp.frequency.value = cutoff; lp.Q.value = 0.6;
-    g.gain.linearRampToValueAtTime(vel, t + 0.03);
+    const att = dur ? 0.03 : 0.09;                         // held notes swell in like a bowed section
+    g.gain.linearRampToValueAtTime(vel, t + att);
     if (dur) { g.gain.setTargetAtTime(0, t + dur, 0.07); end = t + dur + 0.6; }
-    else g.gain.setTargetAtTime(vel * 0.7, t + 0.03, 0.25);
-    for (const det of [-6, 6]) { const o = actx.createOscillator(); o.type = "sawtooth"; o.detune.value = det; oscs.push(o); }
+    else g.gain.setTargetAtTime(vel * 0.8, t + att, 0.3);
+    // A section, not a soloist: several players slightly out of tune with each other, spread across
+    // the stereo field, a quieter octave above, and a slow shared vibrato.
+    const vib = actx.createOscillator(), vibAmt = actx.createGain();
+    vib.frequency.value = 4.6 + Math.random() * 1.2; vibAmt.gain.value = 5;      // ± cents
+    vib.connect(vibAmt);
+    ENSEMBLE.forEach(([det, pan, level, octave]) => {
+      const o = actx.createOscillator(), og = actx.createGain(), sp = actx.createStereoPanner();
+      o.type = "sawtooth"; o.frequency.value = f; o.detune.value = det + octave * 1200 + (Math.random() * 4 - 2);
+      og.gain.value = level; sp.pan.value = pan;
+      vibAmt.connect(o.detune); o.connect(og).connect(sp).connect(g);
+      srcs.push(o);
+    });
+    srcs.push(vib);
   }
-  const n = { g, oscs };
-  oscs.forEach(o => { o.frequency.value = f; o.connect(g); o.start(t); if (end) o.stop(end); });
-  oscs[0].onended = () => live.delete(n);
+  out.connect(master); out.connect(reverbSend[inst]);
+  const n = { g, srcs };
+  srcs.forEach(o => { o.start(t); if (end) o.stop(end); });
+  srcs[0].onended = () => live.delete(n);
   live.add(n);
 }
 function silence() {
@@ -347,26 +416,27 @@ function silence() {
     n.g.gain.cancelScheduledValues(t);
     n.g.gain.setValueAtTime(n.g.gain.value, t);
     n.g.gain.setTargetAtTime(0, t, 0.07);
-    n.oscs.forEach(o => { try { o.stop(t + 0.6); } catch {} });
+    n.srcs.forEach(o => { try { o.stop(t + 0.6); } catch {} });
   }
   live.clear();
 }
 
 // Registers. Lower part (a pianist's left hand): root, fifth, root, third from C2 up.
-// Upper part (right hand): the full chord from C4 up, played according to the pattern.
+// Upper part (right hand): the full chord, played according to the pattern: strings from C4 up, piano from C3 up.
 function lowerNotes(ch) {
   const r = 36 + ch.midi[0] % 12;
   return [r, r + ch.fifth, r + 12, r + 12 + ch.third];
 }
-const upperNotes = ch => ch.midi.map(m => m + 12);
+const upperNotes = (ch, inst) => ch.midi.map(m => m + (inst === "piano" ? 0 : 12));
 
 function strikeLower(ch, t) {
   const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).lower;
-  lowerNotes(ch).forEach((m, i) => note(inst, m, t, i === 0 ? 0.2 : 0.14, null, 1500));
+  const loud = inst === "strings" ? 3.2 : 2;            // the low part needs extra level to carry
+  lowerNotes(ch).forEach((m, i) => note(inst, m, t, (i === 0 ? 0.2 : 0.14) * loud, null, 2500));
 }
 function strikeUpper(ch, t, dur) {
   const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).upper;
-  upperNotes(ch).forEach(m => note(inst, m, t, 0.14, dur));
+  upperNotes(ch, inst).forEach(m => note(inst, m, t, 0.1, dur));
 }
 
 // ── Playback: one chord at a time; the pattern runs in eighth-note steps ──
@@ -405,7 +475,14 @@ function retrigger() {
 }
 function patternStep(c, t, stepDur) {
   const pattern = eff("pattern"), inst = INSTRUMENTS.find(i => i.id === eff("instrument"));
-  const U = upperNotes(c.ch), n = U.length, k = c.step;
+  let U = upperNotes(c.ch, inst.upper);
+  if (ARPS.includes(pattern)) {         // arpeggios run over 1-3 octaves
+    const one = U;
+    U = [];
+    for (let o = 0; o < eff("span"); o++) U.push(...one.map(m => m + 12 * o));
+    U = U.filter(m => m <= 100);
+  }
+  const n = U.length, k = c.step;
   if (k > 0 && k % 8 === 0 && inst.lower === "piano") strikeLower(c.ch, t);   // re-strike the decaying bass every bar
   if (pattern === "pulse") { if (k % 2 === 0) strikeUpper(c.ch, t, stepDur * 1.7); return; }
   let seq;
@@ -413,7 +490,7 @@ function patternStep(c, t, stepDur) {
   else if (pattern === "down") seq = U.map((_, i) => n - 1 - i);
   else if (pattern === "updown") seq = [...U.keys(), ...[...U.keys()].slice(1, -1).reverse()];
   else { seq = []; for (let i = 0; i < n - 1; i++) seq.push(i, n - 1); }       // broken: low, top, middle, top
-  note(inst.upper, U[seq[k % seq.length]], t, 0.3, stepDur * 0.95);
+  note(inst.upper, U[seq[k % seq.length]], t, 0.2, stepDur * 0.95);
 }
 setInterval(() => {
   if (!current || !actx || actx.state !== "running" || eff("pattern") === "sustain") return;
@@ -427,7 +504,7 @@ setInterval(() => {
 }, 25);
 
 /** Apply whatever changed in the settings since `oldSig` was taken. */
-const sig = () => [eff("pattern"), eff("instrument"), eff("variation"), eff("sus")].join();
+const sig = () => [eff("pattern"), eff("instrument"), eff("variation"), eff("sus"), eff("span")].join();
 function refresh(oldSig) {
   if (actx) master.gain.setTargetAtTime(masterGain(), actx.currentTime, 0.03);
   if (sig() !== oldSig) { renderChords(); retrigger(); }
@@ -561,7 +638,7 @@ function twistDeg(q0, q) {
 function openMenu(i, pose) {
   const old = sig(), c = CONTROLS[i];
   const hover = { [c.key]: S[c.key] };
-  if (c.sus) hover.sus = 0;           // wrist centred = normal third
+  if (c.twist) hover[c.twist.key] = c.twist.centre;   // wrist as it is now = the middle choice
   menu = { i, key: c.key, hover, pose0: pose, hist: [], matching: true };
   refresh(old);
 }
@@ -582,9 +659,9 @@ function updateHover(pose, now) {
       const pos = idx(S[c.key]) - d / STEP_DEG, cur = idx(h[c.key]);
       if (Math.abs(pos - cur) > 0.65) h[c.key] = c.options[clamp(Math.round(pos), 0, c.options.length - 1)].id;
     }
-    if (c.sus) {
-      const r = twistDeg(menu.pose0.q, pose.q) * (S.invRoll ? -1 : 1);
-      h.sus = r > (h.sus === 2 ? 12 : 22) ? 2 : r < -(h.sus === 4 ? 12 : 22) ? 4 : 0;
+    if (c.twist) {
+      const tw = c.twist, r = twistDeg(menu.pose0.q, pose.q) * (S.invRoll ? -1 : 1), cur = h[tw.key];
+      h[tw.key] = r > (cur === tw.left ? 12 : 22) ? tw.left : r < -(cur === tw.right ? 12 : 22) ? tw.right : tw.centre;
     }
   }
   menu.hist.push({ t: now, h: { ...h } });
@@ -718,12 +795,12 @@ function buildControls() {
     const body = c.type === "range"
       ? `<div class="meterwrap"><div class="meter" data-key="${c.key}"><i></i><b></b></div><div class="ends"><span>▲ ${c.ends[0]}</span><span>▼ ${c.ends[1]}</span></div></div>`
       : `<div class="opts">${c.options.map(o => `<div class="opt" data-key="${c.key}" data-v="${o.id}">${o.label}</div>`).join("")}</div>`
-        + (c.sus ? `<div class="sus">${[[2, "‹ sus2"], [0, "normal"], [4, "sus4 ›"]].map(([v, l]) => `<div class="opt" data-key="sus" data-v="${v}">${l}</div>`).join("")}</div>` : "");
+        + (c.twist ? `<div class="sus">${[c.twist.left, c.twist.centre, c.twist.right].map((v, j) => `<div class="opt" data-key="${c.twist.key}" data-v="${v}">${c.twist.labels[j]}</div>`).join("")}</div>` : "");
     return `<div class="ctl" id="ctl${i}"><div class="ctlhead"><div class="hands">${hands}</div><div><div class="cname">${i + 1} · ${c.label}</div><div class="cval"></div></div></div>${body}<div class="hint"></div></div>`;
   }).join("");
   $("controls").querySelectorAll(".opt").forEach(el => el.onclick = () => {
     const key = el.dataset.key;
-    setSetting(key, key === "sus" ? +el.dataset.v : el.dataset.v);
+    setSetting(key, key === "sus" || key === "span" ? +el.dataset.v : el.dataset.v);
   });
   $("controls").querySelectorAll(".meter").forEach(el => {
     const c = CONTROLS.find(c => c.key === el.dataset.key);
@@ -735,7 +812,7 @@ function buildControls() {
 function renderControls() {
   ctlDirty = false;
   CONTROLS.forEach((c, i) => {
-    const el = $("ctl" + i), active = !!menu && menu.i === i, v = eff(c.key);
+    const el = $("ctl" + i), active = !!menu && menu.i === i, v = hov(c.key);
     el.classList.toggle("active", active);
     if (c.type === "range") {
       const pct = x => (x - c.min) / (c.max - c.min) * 100;
@@ -743,17 +820,18 @@ function renderControls() {
       el.querySelector(".meter > i").style.height = pct(v) + "%";
       el.querySelector(".meter > b").style.bottom = `calc(${pct(S[c.key])}% - 1px)`;
     } else {
-      const sus = eff("sus"), susOk = susAllowed(eff("variation"), sus);
-      el.querySelector(".cval").textContent = c.options.find(o => o.id === v).label + (c.sus && sus && susOk ? ` sus${sus}` : "");
+      const tw = c.twist || {}, tv = tw.key && hov(tw.key);
+      const extra = !tw.key ? "" : tw.key === "sus" ? (tv && susAllowed(v, tv) ? ` sus${tv}` : "") : (ARPS.includes(v) ? ` · ${tv} oct` : "");
+      el.querySelector(".cval").textContent = c.options.find(o => o.id === v).label + extra;
       el.querySelectorAll(".opt").forEach(o => {
-        const isSus = o.dataset.key === "sus", val = isSus ? +o.dataset.v : o.dataset.v;
+        const second = !!tw.key && o.dataset.key === tw.key, val = second ? +o.dataset.v : o.dataset.v;
         o.classList.toggle("sel", S[o.dataset.key] === val);
-        o.classList.toggle("hover", active && eff(o.dataset.key) === val);
-        if (isSus) o.classList.toggle("na", !susAllowed(eff("variation"), val));
+        o.classList.toggle("hover", active && hov(o.dataset.key) === val);
+        if (second) o.classList.toggle("na", tw.key === "sus" ? !susAllowed(v, val) : !ARPS.includes(v));
       });
     }
     el.querySelector(".hint").textContent = !active ? ""
-      : (c.sus ? "tilt ▲▼ · twist wrist ‹ › · fist = select" : "tilt ▲▼ · fist = select");
+      : (c.twist ? "tilt ▲▼ · twist wrist ‹ › · fist = select" : "tilt ▲▼ · fist = select");
   });
 }
 
