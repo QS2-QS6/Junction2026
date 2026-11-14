@@ -58,9 +58,10 @@
   #piano .bk.on { fill: #2fa868; stroke: var(--accent); stroke-width: .8; }
   @media (max-width: 620px) { .now { flex-direction: column; align-items: stretch; } }
 
-  .chords { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; }
+  .chords { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex: 1; }
+  .wrap > #rhBox { flex: 1; display: flex; flex-direction: column; }
   @media (max-width: 680px) { .chords { grid-template-columns: repeat(4, 1fr); } }
-  .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 6px 12px; text-align: center; cursor: pointer; user-select: none; transition: background .06s, border-color .06s; }
+  .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 6px 12px; text-align: center; cursor: pointer; user-select: none; display: flex; flex-direction: column; justify-content: center; transition: background .06s, border-color .06s; }
   .chord .r { font-size: 30px; line-height: 1.2; font-weight: 700; }
   .chord .n { font-size: 15px; color: var(--muted); }
   .chord .who { margin-top: 8px; min-height: 51px; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
@@ -145,12 +146,12 @@
       <div id="piano"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="rhBox">
       <h2>Right hand</h2>
       <div class="chords" id="chords"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="lhBox">
       <h2>Left hand</h2>
       <div class="controls" id="controls"></div>
     </div>
@@ -1007,6 +1008,9 @@ function drawPiano() {
   keysOn = on;
 }
 (function frame() { requestAnimationFrame(frame); drawViz(); drawSim(); drawPiano(); })();
+
+// The right-hand box takes the spare height, but never grows taller than the left-hand box.
+new ResizeObserver(() => { $("rhBox").style.maxHeight = $("lhBox").offsetHeight + "px"; }).observe($("lhBox"));
 
 buildControls(); buildPiano(); renderChords(); renderNow(null);
 </script>
