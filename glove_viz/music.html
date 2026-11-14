@@ -30,13 +30,14 @@
   .now .notes { color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
   .now.idle .roman { color: #3a404d; }
 
-  .chords { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 18px; }
+  .chords { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; margin-bottom: 18px; }
   @media (max-width: 680px) { .chords { grid-template-columns: repeat(4, 1fr); } }
   .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 6px; text-align: center; cursor: pointer; user-select: none; transition: background .06s, border-color .06s; }
   .chord .deg { font-size: 11px; color: var(--muted); }
   .chord .r { font-size: 22px; font-weight: 700; }
   .chord .n { font-size: 12px; color: var(--muted); }
-  .chord .who { font-size: 11px; margin-top: 4px; min-height: 15px; }
+  .chord .who { margin-top: 6px; min-height: 44px; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+  svg.hand { display: block; flex: none; }
   .chord.active { background: #1f3a2c; border-color: var(--accent); }
 
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -52,7 +53,8 @@
   .val { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
   .val.down { color: var(--text); font-weight: 600; }
   .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .map { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; }
+  .map { display: grid; grid-template-columns: repeat(2, auto 1fr); gap: 8px 12px; align-items: center; }
+  .map .val { text-align: left; color: var(--text); }
   .help { color: var(--muted); font-size: 12px; margin-top: 12px; }
   kbd { background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; }
 </style>
@@ -68,7 +70,7 @@
     <label class="inline">Mode
       <select id="mode">
         <option value="tap">Tap: curl a finger = its degree</option>
-        <option value="count">Count: # extended fingers = degree</option>
+        <option value="count">Count: fingers up from thumb = degree</option>
       </select>
     </label>
     <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
@@ -96,7 +98,7 @@
       <h2 id="mapTitle">Mapping</h2>
       <div class="map" id="map"></div>
       <div class="help" id="modeHelp"></div>
-      <div class="help">No glove? Hold <kbd>1</kbd>–<kbd>7</kbd> or click a chord card to audition.</div>
+      <div class="help">No glove? Hold <kbd>1</kbd>–<kbd>8</kbd> or click a chord card to audition.</div>
     </div>
   </div>
 </div>
@@ -154,11 +156,12 @@ function diatonicChord(rootName, scaleName, deg, sevenths) {
   const intervals = midi.slice(1).map(m => m - midi[0]).join(",");
   const q = QUALITIES[intervals] || { suffix: "?", roman: r => r + "?", word: "other" };
   const chordRoot = names[midi[0] % 12];
+  const up = deg >= 7;                           // degree 8 = degree 1 an octave up
   return {
     degree: deg + 1,
-    roman: q.roman(ROMAN[deg]),
+    roman: q.roman(ROMAN[deg % 7]) + (up ? "↑" : ""),
     name: chordRoot + q.suffix,
-    word: `${chordRoot} ${q.word}`,
+    word: `${chordRoot} ${q.word}${up ? " (octave up)" : ""}`,
     notes: midi.map(m => names[m % 12]),
     midi,
   };
@@ -184,6 +187,7 @@ const DEFAULTS = {
   root: "C", scale: "Major (Ionian)", sevenths: false, mode: "tap",
   tapMap: [1, 2, 3, 4, 5],          // thumb..little -> degree
   countMap: [1, 2, 3, 4, 5],        // 1..5 extended fingers -> degree
+  comboMap: {},                     // combo id -> degree (overrides the combo's default; 0 = stop)
   cal: { open: [20, 20, 20, 20, 20], fist: [100, 100, 100, 100, 100] },
 };
 let S = DEFAULTS;
@@ -265,6 +269,47 @@ const down = [false, false, false, false, false];
 let bends = [0, 0, 0, 0, 0];
 let countCandidate = null, countSince = 0, activeTapFinger = -1;
 
+// Tap-mode finger combinations (finger indices: 0 thumb, 1 index, 2 middle, 3 ring, 4 little).
+// A combo matches when exactly its fingers are curled. The ring finger is anatomically linked to
+// the little finger, so in combos that use the little finger the ring finger is ignored.
+// `def` is the default degree; the user can remap each one (stored in S.comboMap by id; 0 = stop).
+const COMBOS = [
+  { id: "tap8", def: 8, fingers: [0, 1, 2] },      // thumb + index + middle -> I, octave up
+  { id: "tap7", def: 7, fingers: [0, 1, 4] },      // thumb + index + little -> VII
+  { id: "tap6", def: 6, fingers: [0, 4] },         // thumb + little         -> VI
+];
+// Count-mode combinations: the listed fingers are UP, the rest curled.
+// 6–8 are the 1–3 shapes with the little finger raised too.
+const COUNT_COMBOS = [
+  { id: "cnt4b", def: 4, fingers: [1, 2, 3, 4] },  // index + middle + ring + little up -> second way to play 4
+  { id: "cnt8", def: 8, fingers: [0, 1, 2, 4] },   // thumb + index + middle + little up -> I, octave up
+  { id: "cnt7", def: 7, fingers: [0, 1, 4] },      // thumb + index + little up -> VII
+  { id: "cnt6", def: 6, fingers: [0, 4] },         // thumb + little up         -> VI
+];
+const FIST = { id: "fist", def: 0, fingers: [] };   // count mode: all curled -> stop by default
+const RING_FOLLOWS_LITTLE = true;
+const SETTLE_MS = 90;                 // a gesture must hold this long before it sounds
+/** `active[i]` = finger i is part of the gesture (curled for tap combos, up for count combos). */
+function matchCombo(active, combos = COMBOS) {
+  for (const c of combos) {
+    const ignoreRing = RING_FOLLOWS_LITTLE && c.fingers.includes(4) && !c.fingers.includes(3);
+    const ok = [0, 1, 2, 3, 4].every(i => (ignoreRing && i === 3) || active[i] === c.fingers.includes(i));
+    if (ok) return comboDeg(c);
+  }
+  return null;
+}
+/** The degree a combo is mapped to (0 = stop). */
+const comboDeg = c => S.comboMap[c.id] ?? c.def;
+let tapCandidate = undefined, tapSince = 0;
+
+/** 0 = fist, 1..5 = thumb..little extended in order with the rest curled, -1 = any other shape. */
+function orderedCount(curled) {
+  const up = curled.map(c => !c);
+  const n = up.filter(Boolean).length;
+  return up.every((u, i) => u === (i < n)) ? n : -1;
+}
+const COUNT_LABELS = ["Thumb", "Thumb + Index", "Thumb + Index + Middle", "Thumb + Index + Middle + Ring", "All five"];
+
 function tick() {
   const raw = rawAngles();
   if (!raw) return;
@@ -277,18 +322,26 @@ function tick() {
   bends.forEach((b, i) => { down[i] = down[i] ? b > OFF : b > ON; });
 
   if (S.mode === "tap") {
-    // Newest curled finger wins; releasing it falls back to any other still-curled finger.
+    // Combos first; otherwise the newest curled finger wins (falling back to any other still-curled finger).
     for (let i = 0; i < 5; i++) if (down[i] && !prev[i]) activeTapFinger = i;
     if (activeTapFinger >= 0 && !down[activeTapFinger]) activeTapFinger = down.findIndex(Boolean);
-    if (activeTapFinger >= 0) play(S.tapMap[activeTapFinger], "glove");
-    else stop("glove");
-  } else {
-    // Count extended fingers; require the count to be stable for 150 ms (fingers never move in sync).
-    const n = down.filter(d => !d).length;
+    const target = matchCombo(down) ?? (activeTapFinger >= 0 ? S.tapMap[activeTapFinger] : 0);
     const now = performance.now();
-    if (n !== countCandidate) { countCandidate = n; countSince = now; }
+    if (target !== tapCandidate) { tapCandidate = target; tapSince = now; }
+    else if (now - tapSince >= SETTLE_MS) {
+      if (target) play(target, "glove"); else stop("glove");
+    }
+  } else {
+    // Ordered count: N = the first N fingers (thumb, index, middle, ring, little) up and the rest curled.
+    // Count combos (6, 7) next. Fist = stop; any other shape = no change. Must be stable for 150 ms.
+    const n = orderedCount(down);
+    const target = n === 0 ? comboDeg(FIST)
+      : n > 0 ? S.countMap[n - 1]
+      : matchCombo(down.map(c => !c), COUNT_COMBOS) ?? -1;
+    const now = performance.now();
+    if (target !== countCandidate) { countCandidate = target; countSince = now; }
     else if (now - countSince > 150) {
-      if (n === 0) stop("glove"); else play(S.countMap[n - 1], "glove");
+      if (target === 0) stop("glove"); else if (target > 0) play(target, "glove");
     }
   }
 }
@@ -329,13 +382,49 @@ function renderNow(ch) {
   document.querySelectorAll(".chord").forEach(el => el.classList.toggle("active", !!ch && +el.dataset.deg === ch.degree));
 }
 
+// ── Hand pictogram: back of a right hand, thumb on the left. up[i] = finger i extended. ──
+const FINGER_GEOM = [                  // base point on the palm and tip when extended
+  { base: [33, 80], tip: [9, 52],  fold: [52, 72] },   // thumb (folds across the palm)
+  { base: [37, 56], tip: [33, 16] },                   // index
+  { base: [50, 54], tip: [50, 8] },                    // middle
+  { base: [63, 56], tip: [66, 14] },                   // ring
+  { base: [75, 61], tip: [82, 30] },                   // little
+];
+function handSVG(up, size = 44, title = "") {
+  const seg = (a, b, color, op) =>
+    `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${color}" stroke-opacity="${op}" stroke-width="11" stroke-linecap="round"/>`;
+  let curled = "", extended = "";
+  FINGER_GEOM.forEach((g, i) => {
+    const color = FINGERS[i].hex;
+    if (up[i]) extended += seg(g.base, g.tip, color, 1);
+    else curled += seg([g.base[0], g.base[1] - 4], g.fold || [g.base[0], g.base[1] + 14], color, 0.65);
+  });
+  return `<svg class="hand" width="${size}" height="${size * 1.1}" viewBox="0 0 100 110" role="img" aria-label="${title}">` +
+    (title ? `<title>${title}</title>` : "") +
+    `<rect x="27" y="52" width="58" height="52" rx="16" fill="#2a2f3a" stroke="#3d4452" stroke-width="2"/>` +
+    extended + curled + `</svg>`;
+}
+const upExcept = curledIdx => [0, 1, 2, 3, 4].map(i => !curledIdx.includes(i));
+const upOnly = upIdx => [0, 1, 2, 3, 4].map(i => upIdx.includes(i));
+const names = idx => idx.map(i => FINGERS[i].label).join(" + ");
+
+/** Every gesture that plays `deg` in the current mode, as [{up, title}]. */
+function gesturesFor(deg) {
+  if (S.mode === "tap") return [
+    ...FINGERS.map((f, i) => S.tapMap[i] === deg ? { up: upExcept([i]), title: `${f.label} curled` } : null).filter(Boolean),
+    ...COMBOS.filter(c => comboDeg(c) === deg).map(c => ({ up: upExcept(c.fingers), title: `${names(c.fingers)} curled` })),
+  ];
+  return [
+    ...S.countMap.map((d, i) => d === deg ? { up: upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), title: `${COUNT_LABELS[i]} up` } : null).filter(Boolean),
+    ...[...COUNT_COMBOS, FIST].filter(c => comboDeg(c) === deg).map(c => ({ up: upOnly(c.fingers), title: c === FIST ? "Fist" : `${names(c.fingers)} up` })),
+  ];
+}
 function whoPlays(deg) {
-  if (S.mode === "tap") return FINGERS.filter((f, i) => S.tapMap[i] === deg).map(f => `<span style="color:${f.hex}">${f.label}</span>`).join(" ");
-  return S.countMap.map((d, i) => d === deg ? `${i + 1}✋` : null).filter(Boolean).join(" ");
+  return gesturesFor(deg).map(g => handSVG(g.up, 40, g.title)).join("");
 }
 
 function renderChords() {
-  $("chords").innerHTML = [1, 2, 3, 4, 5, 6, 7].map(d => {
+  $("chords").innerHTML = [1, 2, 3, 4, 5, 6, 7, 8].map(d => {
     const ch = diatonicChord(S.root, S.scale, d - 1, S.sevenths);
     return `<div class="chord" data-deg="${d}"><div class="deg">degree ${d}</div><div class="r">${ch.roman}</div><div class="n">${ch.name}</div><div class="who">${whoPlays(d)}</div></div>`;
   }).join("");
@@ -346,18 +435,28 @@ function renderChords() {
 }
 
 function renderMap() {
-  const opts = v => [1, 2, 3, 4, 5, 6, 7].map(d => `<option value="${d}"${d === v ? " selected" : ""}>${d} · ${ROMAN[d - 1]}</option>`).join("");
+  const opts = v => [1, 2, 3, 4, 5, 6, 7, 8].map(d => `<option value="${d}"${d === v ? " selected" : ""}>${d} · ${ROMAN[(d - 1) % 7]}${d === 8 ? "↑" : ""}</option>`).join("")
+    + `<option value="0"${v === 0 ? " selected" : ""}>stop</option>`;
+  // Each row: a hand drawing + a dropdown. `key` says where the choice is stored.
+  const row = (up, title, value, key) => `${handSVG(up, 44, title)}<select data-key="${key}" title="${title}">${opts(value)}</select>`;
   if (S.mode === "tap") {
-    $("mapTitle").textContent = "Mapping: finger → degree";
-    $("map").innerHTML = FINGERS.map((f, i) => `<div class="fname"><span class="sw" style="background:${f.hex}"></span>${f.label}</div><select data-i="${i}">${opts(S.tapMap[i])}</select>`).join("");
-    $("modeHelp").textContent = "Curl a finger past the line to play its chord; open it to release. Newest curled finger wins.";
+    $("mapTitle").textContent = "Mapping: gesture → degree";
+    $("map").innerHTML = FINGERS.map((f, i) => row(upExcept([i]), `${f.label} curled`, S.tapMap[i], `tap:${i}`)).join("")
+      + COMBOS.slice().reverse().map(c => row(upExcept(c.fingers), `${names(c.fingers)} curled`, comboDeg(c), `combo:${c.id}`)).join("");
+    $("modeHelp").textContent = "Curl a finger past the line to play its chord; open it to release. Combos (curl those fingers together) win over single fingers; a gesture must hold ~0.1 s. Ring finger is ignored in combos that use the little finger.";
   } else {
-    $("mapTitle").textContent = "Mapping: extended fingers → degree";
-    $("map").innerHTML = [0, 1, 2, 3, 4].map(i => `<div>${i + 1} finger${i ? "s" : ""} up</div><select data-i="${i}">${opts(S.countMap[i])}</select>`).join("");
-    $("modeHelp").textContent = "Hold up N fingers (any fingers) to play that chord. Make a fist to stop.";
+    $("mapTitle").textContent = "Mapping: gesture → degree";
+    $("map").innerHTML = [0, 1, 2, 3, 4].map(i => row(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), `${COUNT_LABELS[i]} up`, S.countMap[i], `count:${i}`)).join("")
+      + COUNT_COMBOS.slice().reverse().map(c => row(upOnly(c.fingers), `${names(c.fingers)} up`, comboDeg(c), `combo:${c.id}`)).join("")
+      + row(upOnly([]), "Fist", comboDeg(FIST), `combo:${FIST.id}`);
+    $("modeHelp").textContent = "Raise fingers in order from the thumb: thumb = 1, thumb + index = 2, … all five = 5; the other fingers stay curled. 4 also works as the four fingers up with the thumb tucked. Fist stops by default. Any shape not shown keeps the current chord.";
   }
   $("map").querySelectorAll("select").forEach(sel => sel.onchange = () => {
-    (S.mode === "tap" ? S.tapMap : S.countMap)[+sel.dataset.i] = +sel.value; save(); renderChords();
+    const [kind, k] = sel.dataset.key.split(":"), v = +sel.value;
+    if (kind === "tap") S.tapMap[+k] = v;
+    else if (kind === "count") S.countMap[+k] = v;
+    else S.comboMap = { ...S.comboMap, [k]: v };
+    save(); renderChords();
   });
 }
 
@@ -375,9 +474,9 @@ function onSettingsChange() {
 function setAudioBtn() { const on = actx && actx.state === "running"; $("audioBtn").textContent = on ? "Audio on" : "Start audio"; $("audioBtn").classList.toggle("on", !!on); }
 $("audioBtn").onclick = () => { startAudio(); setTimeout(setAudioBtn, 50); };
 
-// Keyboard audition: hold 1–7.
-window.addEventListener("keydown", e => { const d = +e.key; if (d >= 1 && d <= 7 && !e.repeat) { startAudio(); setAudioBtn(); play(d, "key" + d); } });
-window.addEventListener("keyup", e => { const d = +e.key; if (d >= 1 && d <= 7) stop("key" + d); });
+// Keyboard audition: hold 1–8.
+window.addEventListener("keydown", e => { const d = +e.key; if (d >= 1 && d <= 8 && !e.repeat) { startAudio(); setAudioBtn(); play(d, "key" + d); } });
+window.addEventListener("keyup", e => { const d = +e.key; if (d >= 1 && d <= 8) stop("key" + d); });
 
 setInterval(tick, 10);
 setInterval(() => {
