@@ -58,9 +58,24 @@ finger-bend measurements.
 Create a Tiger Data TimescaleDB service and set its PostgreSQL connection URL
 as `DATABASE_URL` in the shell. Don’t commit the URL or credentials.
 
+The credentials file uses `DATABASE_URL`, the same name expected by the
+importer and trainer. In PowerShell, load it into the current terminal session
+without printing the connection string:
+
+```powershell
+$envFile = ".\glove_viz\tiger-cloud-music_production-credentials.env"
+$urlLine = Get-Content -LiteralPath $envFile | Where-Object { $_ -match '^\s*(?:export\s+)?DATABASE_URL\s*=' } | Select-Object -First 1
+if (-not $urlLine) { throw "DATABASE_URL was not found in $envFile" }
+$env:DATABASE_URL = ($urlLine -replace '^\s*(?:export\s+)?DATABASE_URL\s*=\s*', '').Trim().Trim([char]34).Trim([char]39)
+if (-not $env:DATABASE_URL.StartsWith("postgres")) { throw "DATABASE_URL is not a PostgreSQL connection URL" }
+```
+
+The credential file should remain local and is ignored by Git. Add the
+replacement `DATABASE_URL` as a secret/environment variable in Verda; do not
+upload the credentials file or commit it.
+
 ```powershell
 py -m pip install -r requirements-data.txt
-$env:DATABASE_URL = "postgresql://..."
 py .\tools\import_tigerdata.py
 ```
 
