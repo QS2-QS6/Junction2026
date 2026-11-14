@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glove Chords</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --card: #1d212a; --line: #2a2f3a; --text: #e6e8ec; --muted: #8b93a3;
+    --accent: #4fd18b; --warn: #e5a14d;
+    --thumb: #ff7a59; --index: #f5c542; --middle: #4fd18b; --ring: #4aa8ff; --little: #b07cff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 18px; }
+  h1 { font-size: 18px; margin: 0 12px 0 0; }
+  label.inline { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  select, button { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; font: inherit; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #08130d; border-color: var(--accent); font-weight: 600; }
+  button.primary.on { background: var(--card); color: var(--accent); }
+  .status { color: var(--muted); font-size: 12px; margin-left: auto; }
+  .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e5484d; margin-right: 6px; }
+  .status.live .dot { background: var(--accent); }
+
+  .now { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px; text-align: center; margin-bottom: 14px; }
+  .now .roman { font-size: 56px; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+  .now .name { font-size: 20px; margin-top: 8px; }
+  .now .notes { color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .now.idle .roman { color: #3a404d; }
+
+  .chords { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin-bottom: 18px; }
+  @media (max-width: 680px) { .chords { grid-template-columns: repeat(4, 1fr); } }
+  .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 6px; text-align: center; cursor: pointer; user-select: none; transition: background .06s, border-color .06s; }
+  .chord .deg { font-size: 11px; color: var(--muted); }
+  .chord .r { font-size: 22px; font-weight: 700; }
+  .chord .n { font-size: 12px; color: var(--muted); }
+  .chord .who { font-size: 11px; margin-top: 4px; min-height: 15px; }
+  .chord.active { background: #1f3a2c; border-color: var(--accent); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .frow { display: grid; grid-template-columns: 70px 1fr 50px; align-items: center; gap: 10px; margin: 9px 0; }
+  .fname { display: flex; align-items: center; gap: 7px; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .bar { position: relative; height: 12px; background: #232733; border-radius: 6px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; }
+  .bar .th { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff6; left: 50%; }
+  .val { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .val.down { color: var(--text); font-weight: 600; }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .map { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; }
+  .help { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  kbd { background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Glove Chords</h1>
+    <button class="primary" id="audioBtn">Start audio</button>
+    <label class="inline">Key <select id="root"></select></label>
+    <label class="inline">Scale <select id="scale"></select></label>
+    <label class="inline"><input type="checkbox" id="sevenths"> 7th chords</label>
+    <label class="inline">Mode
+      <select id="mode">
+        <option value="tap">Tap: curl a finger = its degree</option>
+        <option value="count">Count: # extended fingers = degree</option>
+      </select>
+    </label>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
+  </header>
+
+  <div class="now idle" id="now">
+    <div class="roman" id="nowRoman">–</div>
+    <div class="name" id="nowName">no chord</div>
+    <div class="notes" id="nowNotes">&nbsp;</div>
+  </div>
+
+  <div class="chords" id="chords"></div>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Fingers (bend, calibrated)</h2>
+      <div id="fingers"></div>
+      <div class="btns">
+        <button id="calOpen">Calibrate: open hand</button>
+        <button id="calFist">Calibrate: fist</button>
+      </div>
+      <div class="help" id="calHelp">Hold the pose, then click. White line = trigger threshold.</div>
+    </div>
+    <div class="panel">
+      <h2 id="mapTitle">Mapping</h2>
+      <div class="map" id="map"></div>
+      <div class="help" id="modeHelp"></div>
+      <div class="help">No glove? Hold <kbd>1</kbd>–<kbd>7</kbd> or click a chord card to audition.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Music theory: pure functions, no DOM. -->
+<script>
+"use strict";
+const SHARPS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const FLATS  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
+const ROOTS  = ["C","Db","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+const SCALES = {
+  "Major (Ionian)":  [0,2,4,5,7,9,11],
+  "Natural minor":   [0,2,3,5,7,8,10],
+  "Harmonic minor":  [0,2,3,5,7,8,11],
+  "Dorian":          [0,2,3,5,7,9,10],
+  "Phrygian":        [0,1,3,5,7,8,10],
+  "Lydian":          [0,2,4,6,7,9,11],
+  "Mixolydian":      [0,2,4,5,7,9,10],
+};
+const ROMAN = ["I","II","III","IV","V","VI","VII"];
+
+// Chord quality from semitone intervals above the root: [third, fifth, (seventh)].
+const QUALITIES = {
+  "4,7":    { suffix: "",     roman: r => r,                    word: "major" },
+  "3,7":    { suffix: "m",    roman: r => r.toLowerCase(),      word: "minor" },
+  "3,6":    { suffix: "dim",  roman: r => r.toLowerCase() + "°", word: "diminished" },
+  "4,8":    { suffix: "aug",  roman: r => r + "+",              word: "augmented" },
+  "4,7,11": { suffix: "maj7", roman: r => r + "maj7",           word: "major 7th" },
+  "4,7,10": { suffix: "7",    roman: r => r + "7",              word: "dominant 7th" },
+  "3,7,10": { suffix: "m7",   roman: r => r.toLowerCase() + "7", word: "minor 7th" },
+  "3,6,10": { suffix: "m7b5", roman: r => r.toLowerCase() + "ø7", word: "half-diminished 7th" },
+  "3,6,9":  { suffix: "dim7", roman: r => r.toLowerCase() + "°7", word: "diminished 7th" },
+  "3,7,11": { suffix: "mMaj7",roman: r => r.toLowerCase() + "maj7", word: "minor-major 7th" },
+  "4,8,11": { suffix: "+maj7",roman: r => r + "+maj7",          word: "augmented major 7th" },
+};
+
+function useFlats(rootName, scaleName) {
+  if (rootName.includes("b") || rootName === "F") return true;
+  const minorish = /minor|Dorian|Phrygian/.test(scaleName);
+  return minorish && ["C", "D", "G"].includes(rootName);
+}
+
+/** Diatonic chord on scale degree `deg` (0-based). Returns names, roman numeral and MIDI notes. */
+function diatonicChord(rootName, scaleName, deg, sevenths) {
+  const scale = SCALES[scaleName];
+  const rootPc = ROOTS.indexOf(rootName);
+  const names = useFlats(rootName, scaleName) ? FLATS : SHARPS;
+  const tones = sevenths ? 4 : 3;
+  const base = 48 + rootPc;                      // tonic around C3..B3
+  const midi = [];
+  for (let k = 0; k < tones; k++) {
+    const idx = deg + 2 * k;                     // stack thirds within the scale
+    midi.push(base + scale[idx % 7] + 12 * Math.floor(idx / 7));
+  }
+  const intervals = midi.slice(1).map(m => m - midi[0]).join(",");
+  const q = QUALITIES[intervals] || { suffix: "?", roman: r => r + "?", word: "other" };
+  const chordRoot = names[midi[0] % 12];
+  return {
+    degree: deg + 1,
+    roman: q.roman(ROMAN[deg]),
+    name: chordRoot + q.suffix,
+    word: `${chordRoot} ${q.word}`,
+    notes: midi.map(m => names[m % 12]),
+    midi,
+  };
+}
+</script>
+
+<!-- App -->
+<script>
+"use strict";
+const FINGERS = [
+  { id: "thumb_finger_sensor",  label: "Thumb",  color: "--thumb" },
+  { id: "index_finger_sensor",  label: "Index",  color: "--index" },
+  { id: "middle_finger_sensor", label: "Middle", color: "--middle" },
+  { id: "ring_finger_sensor",   label: "Ring",   color: "--ring" },
+  { id: "little_finger_sensor", label: "Little", color: "--little" },
+];
+const css = getComputedStyle(document.documentElement);
+FINGERS.forEach(f => f.hex = css.getPropertyValue(f.color).trim());
+const $ = id => document.getElementById(id);
+
+// ── Settings (persisted per browser) ──────────────────────────────────────
+const DEFAULTS = {
+  root: "C", scale: "Major (Ionian)", sevenths: false, mode: "tap",
+  tapMap: [1, 2, 3, 4, 5],          // thumb..little -> degree
+  countMap: [1, 2, 3, 4, 5],        // 1..5 extended fingers -> degree
+  cal: { open: [20, 20, 20, 20, 20], fist: [100, 100, 100, 100, 100] },
+};
+let S = DEFAULTS;
+try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem("gloveChords") || "{}") }; } catch {}
+const save = () => { try { localStorage.setItem("gloveChords", JSON.stringify(S)); } catch {} };
+
+// ── Synth (Web Audio) ─────────────────────────────────────────────────────
+let actx = null, master = null;
+function startAudio() {
+  if (actx) { actx.resume(); return; }
+  actx = new AudioContext();
+  const comp = actx.createDynamicsCompressor();
+  master = actx.createGain(); master.gain.value = 0.22;
+  master.connect(comp).connect(actx.destination);
+}
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+function chordOn(midi) {
+  if (!actx) return null;
+  const t = actx.currentTime;
+  const env = actx.createGain(); env.gain.value = 0;
+  const lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200; lp.Q.value = 0.6;
+  env.connect(lp).connect(master);
+  env.gain.setValueAtTime(0, t);
+  env.gain.linearRampToValueAtTime(1, t + 0.025);
+  env.gain.setTargetAtTime(0.7, t + 0.025, 0.25);
+  const notes = [midi[0] - 12, ...midi];          // add a bass root an octave down
+  const oscs = [];
+  notes.forEach((m, i) => {
+    const g = actx.createGain(); g.gain.value = (i === 0 ? 0.5 : 0.32) / notes.length * 3;
+    g.connect(env);
+    for (const det of [-6, 6]) {
+      const o = actx.createOscillator(); o.type = i === 0 ? "triangle" : "sawtooth";
+      o.frequency.value = mtof(m); o.detune.value = det;
+      o.connect(g); o.start(t); oscs.push(o);
+    }
+  });
+  return { env, oscs };
+}
+function chordOff(v) {
+  if (!v || !actx) return;
+  const t = actx.currentTime;
+  v.env.gain.cancelScheduledValues(t);
+  v.env.gain.setValueAtTime(v.env.gain.value, t);
+  v.env.gain.setTargetAtTime(0, t, 0.12);
+  v.oscs.forEach(o => o.stop(t + 0.8));
+}
+
+// ── Playback state: one chord sounds at a time ────────────────────────────
+let current = null;   // { deg, source, voice }
+function play(deg, source) {
+  if (current && current.deg === deg && current.source === source) return;
+  stop();
+  const ch = diatonicChord(S.root, S.scale, deg - 1, S.sevenths);
+  current = { deg, source, voice: chordOn(ch.midi) };
+  renderNow(ch);
+}
+function stop(source) {
+  if (!current || (source && current.source !== source)) return;
+  chordOff(current.voice); current = null; renderNow(null);
+}
+
+// ── Glove input ──────────────────────────────────────────────────────────
+let latest = null, lastMsgAt = 0;
+const es = new EventSource("/stream");
+es.onmessage = e => { latest = JSON.parse(e.data); lastMsgAt = performance.now(); };
+
+const angleDeg = q => 2 * Math.acos(Math.min(1, Math.abs(q[3]))) * 180 / Math.PI;
+function rawAngles() {
+  const g = latest && latest.groups.default;
+  if (!g) return null;
+  return FINGERS.map(f => {
+    const T = g.s[f.id] && g.s[f.id]["TRANSFORM@hub"];
+    return T ? angleDeg(T.slice(3, 7)) : null;
+  });
+}
+const ON = 0.6, OFF = 0.4;            // hysteresis on normalized bend
+const down = [false, false, false, false, false];
+let bends = [0, 0, 0, 0, 0];
+let countCandidate = null, countSince = 0, activeTapFinger = -1;
+
+function tick() {
+  const raw = rawAngles();
+  if (!raw) return;
+  bends = raw.map((a, i) => {
+    if (a == null) return 0;
+    const span = S.cal.fist[i] - S.cal.open[i];
+    return Math.abs(span) < 5 ? 0 : (a - S.cal.open[i]) / span;
+  });
+  const prev = down.slice();
+  bends.forEach((b, i) => { down[i] = down[i] ? b > OFF : b > ON; });
+
+  if (S.mode === "tap") {
+    // Newest curled finger wins; releasing it falls back to any other still-curled finger.
+    for (let i = 0; i < 5; i++) if (down[i] && !prev[i]) activeTapFinger = i;
+    if (activeTapFinger >= 0 && !down[activeTapFinger]) activeTapFinger = down.findIndex(Boolean);
+    if (activeTapFinger >= 0) play(S.tapMap[activeTapFinger], "glove");
+    else stop("glove");
+  } else {
+    // Count extended fingers; require the count to be stable for 150 ms (fingers never move in sync).
+    const n = down.filter(d => !d).length;
+    const now = performance.now();
+    if (n !== countCandidate) { countCandidate = n; countSince = now; }
+    else if (now - countSince > 150) {
+      if (n === 0) stop("glove"); else play(S.countMap[n - 1], "glove");
+    }
+  }
+}
+
+// ── Calibration (average ~0.5 s of samples) ──────────────────────────────
+function calibrate(which) {
+  const samples = [];
+  const btn = $(which === "open" ? "calOpen" : "calFist");
+  btn.disabled = true;
+  const iv = setInterval(() => {
+    const r = rawAngles(); if (r && r.every(a => a != null)) samples.push(r);
+    if (samples.length >= 25) {
+      clearInterval(iv); btn.disabled = false;
+      S.cal[which] = [0, 1, 2, 3, 4].map(i => samples.reduce((s, r) => s + r[i], 0) / samples.length);
+      save();
+      $("calHelp").textContent = `Calibrated ${which}: ` + S.cal[which].map(a => a.toFixed(0) + "°").join(" / ");
+    }
+  }, 20);
+  setTimeout(() => { if (btn.disabled) { clearInterval(iv); btn.disabled = false; $("calHelp").textContent = "No glove data — calibration skipped."; } }, 3000);
+}
+$("calOpen").onclick = () => calibrate("open");
+$("calFist").onclick = () => calibrate("fist");
+
+// ── Rendering ────────────────────────────────────────────────────────────
+function fill(sel, items, value) {
+  sel.innerHTML = items.map(v => `<option${v === value ? " selected" : ""}>${v}</option>`).join("");
+}
+fill($("root"), ROOTS, S.root);
+fill($("scale"), Object.keys(SCALES), S.scale);
+$("sevenths").checked = S.sevenths;
+$("mode").value = S.mode;
+
+function renderNow(ch) {
+  $("now").classList.toggle("idle", !ch);
+  $("nowRoman").textContent = ch ? ch.roman : "–";
+  $("nowName").textContent = ch ? `${ch.name}  ·  ${ch.word}` : "no chord";
+  $("nowNotes").innerHTML = ch ? ch.notes.join(" – ") : "&nbsp;";
+  document.querySelectorAll(".chord").forEach(el => el.classList.toggle("active", !!ch && +el.dataset.deg === ch.degree));
+}
+
+function whoPlays(deg) {
+  if (S.mode === "tap") return FINGERS.filter((f, i) => S.tapMap[i] === deg).map(f => `<span style="color:${f.hex}">${f.label}</span>`).join(" ");
+  return S.countMap.map((d, i) => d === deg ? `${i + 1}✋` : null).filter(Boolean).join(" ");
+}
+
+function renderChords() {
+  $("chords").innerHTML = [1, 2, 3, 4, 5, 6, 7].map(d => {
+    const ch = diatonicChord(S.root, S.scale, d - 1, S.sevenths);
+    return `<div class="chord" data-deg="${d}"><div class="deg">degree ${d}</div><div class="r">${ch.roman}</div><div class="n">${ch.name}</div><div class="who">${whoPlays(d)}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".chord").forEach(el => {
+    el.onpointerdown = () => { startAudio(); setAudioBtn(); play(+el.dataset.deg, "ui"); };
+    el.onpointerup = el.onpointerleave = () => stop("ui");
+  });
+}
+
+function renderMap() {
+  const opts = v => [1, 2, 3, 4, 5, 6, 7].map(d => `<option value="${d}"${d === v ? " selected" : ""}>${d} · ${ROMAN[d - 1]}</option>`).join("");
+  if (S.mode === "tap") {
+    $("mapTitle").textContent = "Mapping: finger → degree";
+    $("map").innerHTML = FINGERS.map((f, i) => `<div class="fname"><span class="sw" style="background:${f.hex}"></span>${f.label}</div><select data-i="${i}">${opts(S.tapMap[i])}</select>`).join("");
+    $("modeHelp").textContent = "Curl a finger past the line to play its chord; open it to release. Newest curled finger wins.";
+  } else {
+    $("mapTitle").textContent = "Mapping: extended fingers → degree";
+    $("map").innerHTML = [0, 1, 2, 3, 4].map(i => `<div>${i + 1} finger${i ? "s" : ""} up</div><select data-i="${i}">${opts(S.countMap[i])}</select>`).join("");
+    $("modeHelp").textContent = "Hold up N fingers (any fingers) to play that chord. Make a fist to stop.";
+  }
+  $("map").querySelectorAll("select").forEach(sel => sel.onchange = () => {
+    (S.mode === "tap" ? S.tapMap : S.countMap)[+sel.dataset.i] = +sel.value; save(); renderChords();
+  });
+}
+
+$("fingers").innerHTML = FINGERS.map((f, i) => `
+  <div class="frow"><div class="fname"><span class="sw" style="background:${f.hex}"></span>${f.label}</div>
+  <div class="bar"><i id="b${i}" style="background:${f.hex}"></i><div class="th" style="left:${ON * 100}%"></div></div>
+  <div class="val" id="v${i}">–</div></div>`).join("");
+
+function onSettingsChange() {
+  S.root = $("root").value; S.scale = $("scale").value; S.sevenths = $("sevenths").checked; S.mode = $("mode").value;
+  save(); stop(); renderChords(); renderMap();
+}
+["root", "scale", "sevenths", "mode"].forEach(id => $(id).onchange = onSettingsChange);
+
+function setAudioBtn() { const on = actx && actx.state === "running"; $("audioBtn").textContent = on ? "Audio on" : "Start audio"; $("audioBtn").classList.toggle("on", !!on); }
+$("audioBtn").onclick = () => { startAudio(); setTimeout(setAudioBtn, 50); };
+
+// Keyboard audition: hold 1–7.
+window.addEventListener("keydown", e => { const d = +e.key; if (d >= 1 && d <= 7 && !e.repeat) { startAudio(); setAudioBtn(); play(d, "key" + d); } });
+window.addEventListener("keyup", e => { const d = +e.key; if (d >= 1 && d <= 7) stop("key" + d); });
+
+setInterval(tick, 10);
+setInterval(() => {
+  bends.forEach((b, i) => {
+    $("b" + i).style.width = `${Math.max(0, Math.min(1, b)) * 100}%`;
+    const v = $("v" + i); v.textContent = `${Math.round(b * 100)}%`; v.classList.toggle("down", down[i]);
+  });
+  const live = latest && performance.now() - lastMsgAt < 1500 && latest.status.startsWith("streaming");
+  $("status").classList.toggle("live", !!live);
+  $("statusText").textContent = latest ? latest.status : "waiting for visualizer server…";
+}, 60);
+
+renderChords(); renderMap(); renderNow(null);
+</script>
+</body>
+</html>
