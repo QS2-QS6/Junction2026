@@ -56,6 +56,34 @@
   .map { display: grid; grid-template-columns: repeat(2, auto 1fr); gap: 8px 12px; align-items: center; }
   .map .val { text-align: left; color: var(--text); }
   .help { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  .ctlbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-bottom: 12px; }
+  .ctlbar h2 { margin: 0 auto 0 0; }
+  .ctlbar label { color: var(--muted); font-size: 12px; display: flex; align-items: center; gap: 5px; }
+  .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  @media (max-width: 860px) { .controls { grid-template-columns: repeat(2, 1fr); } }
+  .ctl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .ctl.active { border-color: var(--accent); background: #1f3a2c; }
+  .ctlhead { display: flex; align-items: center; gap: 8px; min-height: 50px; }
+  .ctlhead .hands { display: flex; flex: none; }
+  .cname { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .cval { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .meterwrap { display: flex; gap: 8px; flex: 1; min-height: 150px; }
+  .meter { position: relative; width: 34px; background: #232733; border-radius: 6px; overflow: hidden; cursor: pointer; touch-action: none; }
+  .meter > i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--muted); }
+  .ctl.active .meter > i { background: var(--accent); }
+  .meter > b { position: absolute; left: 0; right: 0; height: 2px; background: #fff; display: none; }
+  .ctl.active .meter > b { display: block; }
+  .ends { display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 11px; }
+  .opts { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .opt { border: 1px solid transparent; border-radius: 6px; padding: 4px 7px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+  .opt.sel { color: var(--text); background: #2a2f3a; font-weight: 600; }
+  .opt.hover { border-color: var(--accent); color: var(--text); }
+  .opt.na { opacity: .35; text-decoration: line-through; }
+  .sus { display: flex; flex-direction: row; gap: 4px; }
+  .sus .opt { flex: 1; text-align: center; padding: 4px 2px; }
+  .ctl .hint { font-size: 11px; color: var(--muted); min-height: 16px; }
+  .ctl.active .hint { color: var(--accent); }
+  .handname { font-size: 12px; color: var(--muted); margin: 12px 0 2px; }
   kbd { background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; }
 </style>
 </head>
@@ -66,13 +94,6 @@
     <button class="primary" id="audioBtn">Start audio</button>
     <label class="inline">Key <select id="root"></select></label>
     <label class="inline">Scale <select id="scale"></select></label>
-    <label class="inline"><input type="checkbox" id="sevenths"> 7th chords</label>
-    <label class="inline">Mode
-      <select id="mode">
-        <option value="tap">Tap: curl a finger = its degree</option>
-        <option value="count">Count: fingers up from thumb = degree</option>
-      </select>
-    </label>
     <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
   </header>
 
@@ -82,6 +103,18 @@
     <div class="notes" id="nowNotes">&nbsp;</div>
   </div>
 
+  <div class="panel" style="margin-bottom:14px">
+    <div class="ctlbar">
+      <h2>Left hand: settings</h2>
+      <label><input type="checkbox" id="swap"> swap hands</label>
+      <label><input type="checkbox" id="invTilt"> invert up/down</label>
+      <label><input type="checkbox" id="invRoll"> invert wrist twist</label>
+    </div>
+    <div class="controls" id="controls"></div>
+    <div class="help">Left hand: hold a finger count to open that setting, tilt the hand up / down to move through it, then close the fist to select. Holding a different count instead switches to that setting without saving. Variation and sus go back to a plain triad on every new chord. You can also click any option.</div>
+  </div>
+
+  <h2>Right hand: chords</h2>
   <div class="chords" id="chords"></div>
 
   <div class="grid2">
@@ -89,13 +122,13 @@
       <h2>Fingers (bend, calibrated)</h2>
       <div id="fingers"></div>
       <div class="btns">
-        <button id="calOpen">Calibrate: open hand</button>
-        <button id="calFist">Calibrate: fist</button>
+        <button id="calOpen">Calibrate: open hands</button>
+        <button id="calFist">Calibrate: fists</button>
       </div>
-      <div class="help" id="calHelp">Hold the pose, then click. White line = trigger threshold.</div>
+      <div class="help" id="calHelp">Hold the pose with every glove you are wearing, then click. White line = trigger threshold.</div>
     </div>
     <div class="panel">
-      <h2 id="mapTitle">Mapping</h2>
+      <h2 id="mapTitle">Right hand mapping: gesture → degree</h2>
       <div class="map" id="map"></div>
       <div class="help" id="modeHelp"></div>
       <div class="help">No glove? Hold <kbd>1</kbd>–<kbd>8</kbd> or click a chord card to audition.</div>
@@ -141,29 +174,66 @@ function useFlats(rootName, scaleName) {
   return minorish && ["C", "D", "G"].includes(rootName);
 }
 
-/** Diatonic chord on scale degree `deg` (0-based). Returns names, roman numeral and MIDI notes. */
-function diatonicChord(rootName, scaleName, deg, sevenths) {
+const VARIATIONS = [
+  { id: "9", label: "9th" }, { id: "7", label: "7th" }, { id: "triad", label: "Triad" },
+  { id: "6", label: "6th" }, { id: "add9", label: "Add 9" },
+];
+/** sus2 doubles the 9th, so it is not offered on the 9th variations. */
+const susAllowed = (variation, sus) => !(sus === 2 && (variation === "9" || variation === "add9"));
+
+/**
+ * Chord on scale degree `deg` (0-based). The third, fifth, 6th, 7th and 9th are diatonic (stacked from
+ * the scale); sus2 / sus4 replace the third with a major 2nd / perfect 4th above the root.
+ * `midi` is in close position with the tonic around C3; the synth moves it to each instrument's register.
+ */
+function buildChord(rootName, scaleName, deg, variation = "triad", sus = 0) {
   const scale = SCALES[scaleName];
-  const rootPc = ROOTS.indexOf(rootName);
   const names = useFlats(rootName, scaleName) ? FLATS : SHARPS;
-  const tones = sevenths ? 4 : 3;
-  const base = 48 + rootPc;                      // tonic around C3..B3
-  const midi = [];
-  for (let k = 0; k < tones; k++) {
-    const idx = deg + 2 * k;                     // stack thirds within the scale
-    midi.push(base + scale[idx % 7] + 12 * Math.floor(idx / 7));
+  const base = 48 + ROOTS.indexOf(rootName);
+  const tone = k => { const idx = deg + k; return base + scale[idx % 7] + 12 * Math.floor(idx / 7); };
+  const r = tone(0), T = tone(2) - r, F = tone(4) - r, X = tone(5) - r, Sv = tone(6) - r, N = tone(8) - r;
+  if (!susAllowed(variation, sus)) sus = 0;
+  const third = sus === 2 ? 2 : sus === 4 ? 5 : T;
+  const iv = [0, third, F];
+  if (variation === "6") iv.push(X);
+  if (variation === "7" || variation === "9") iv.push(Sv);
+  if (variation === "9" || variation === "add9") iv.push(N);
+  const midi = iv.map(i => r + i);
+
+  const other = { suffix: "?", roman: x => x + "?", word: "other" };
+  const tq = QUALITIES[`${T},${F}`] || other, sq = QUALITIES[`${T},${F},${Sv}`] || other;
+  const R = ROMAN[deg % 7], flat9 = N !== 14, flat6 = X !== 9;
+  let suffix, roman, word;
+  if (sus) {
+    const ext = { triad: "", "7": Sv === 11 ? "maj7" : "7", "9": (Sv === 11 ? "maj9" : "9") + (flat9 ? "(b9)" : ""),
+                  "6": flat6 ? "(b6)" : "6", add9: "" }[variation];
+    suffix = ext + "sus" + sus + (variation === "add9" ? (flat9 ? "add(b9)" : "add9") : "") + (F === 6 ? "(b5)" : F === 8 ? "(#5)" : "");
+    roman = R + suffix;
+    word = `suspended ${sus === 2 ? "2nd" : "4th"}` + (variation === "triad" ? "" : `, ${VARIATIONS.find(v => v.id === variation).label.toLowerCase()}`);
+  } else if (variation === "7") {
+    suffix = sq.suffix; roman = sq.roman(R); word = sq.word;
+  } else if (variation === "9") {
+    suffix = flat9 ? sq.suffix + "(b9)" : sq.suffix.replace("7", "9");
+    roman = flat9 ? sq.roman(R) + "(b9)" : sq.roman(R).replace("7", "9");
+    word = flat9 ? sq.word + ", flat 9th" : sq.word.replace("7th", "9th");
+  } else if (variation === "6") {
+    const x = flat6 ? "(b6)" : "6";
+    suffix = tq.suffix + x; roman = tq.roman(R) + x; word = tq.word + (flat6 ? " flat 6th" : " 6th");
+  } else if (variation === "add9") {
+    const x = flat9 ? "add(b9)" : "add9";
+    suffix = tq.suffix + x; roman = tq.roman(R) + x; word = tq.word + (flat9 ? " add flat 9" : " add 9");
+  } else {
+    suffix = tq.suffix; roman = tq.roman(R); word = tq.word;
   }
-  const intervals = midi.slice(1).map(m => m - midi[0]).join(",");
-  const q = QUALITIES[intervals] || { suffix: "?", roman: r => r + "?", word: "other" };
-  const chordRoot = names[midi[0] % 12];
+  const chordRoot = names[r % 12];
   const up = deg >= 7;                           // degree 8 = degree 1 an octave up
   return {
     degree: deg + 1,
-    roman: q.roman(ROMAN[deg % 7]) + (up ? "↑" : ""),
-    name: chordRoot + q.suffix,
-    word: `${chordRoot} ${q.word}${up ? " (octave up)" : ""}`,
+    roman: roman + (up ? "↑" : ""),
+    name: chordRoot + suffix,
+    word: `${chordRoot} ${word}${up ? " (octave up)" : ""}`,
     notes: midi.map(m => names[m % 12]),
-    midi,
+    midi, third, fifth: F,
   };
 }
 </script>
@@ -183,71 +253,191 @@ FINGERS.forEach(f => f.hex = css.getPropertyValue(f.color).trim());
 const $ = id => document.getElementById(id);
 
 // ── Settings (persisted per browser) ──────────────────────────────────────
+const CAL0 = () => ({ open: [20, 20, 20, 20, 20], fist: [100, 100, 100, 100, 100] });
 const DEFAULTS = {
-  root: "C", scale: "Major (Ionian)", sevenths: false, mode: "tap",
-  tapMap: [1, 2, 3, 4, 5],          // thumb..little -> degree
-  countMap: [1, 2, 3, 4, 5],        // 1..5 extended fingers -> degree
+  root: "C", scale: "Major (Ionian)",
+  countMap: [1, 2, 3, 4, 5],        // right hand: 1..5 extended fingers -> degree
   comboMap: {},                     // combo id -> degree (overrides the combo's default; 0 = stop)
-  cal: { open: [20, 20, 20, 20, 20], fist: [100, 100, 100, 100, 100] },
+  cal: { right: CAL0(), left: CAL0() },
+  volume: 0.7, tempo: 100, pattern: "sustain", instrument: "mix", variation: "triad", sus: 0,
+  swap: false, invTilt: false, invRoll: false,
 };
 let S = DEFAULTS;
 try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem("gloveChords") || "{}") }; } catch {}
+if (S.cal.open) S.cal = { right: S.cal, left: CAL0() };          // older single-glove calibration
 const save = () => { try { localStorage.setItem("gloveChords", JSON.stringify(S)); } catch {} };
 
+// ── Left-hand settings ────────────────────────────────────────────────────
+// Lists are written top to bottom, the way they appear on screen (tilt up = move towards the top).
+const PATTERNS = [
+  { id: "down", label: "Arpeggio down" }, { id: "up", label: "Arpeggio up" }, { id: "updown", label: "Arpeggio up-down" },
+  { id: "sustain", label: "Sustain" }, { id: "pulse", label: "Pulse" }, { id: "broken", label: "Broken chord" },
+];
+const INSTRUMENTS = [
+  { id: "strings", label: "Strings + strings", lower: "strings", upper: "strings" },
+  { id: "mix",     label: "Strings low + piano high", lower: "strings", upper: "piano" },
+  { id: "piano",   label: "Piano + piano", lower: "piano", upper: "piano" },
+];
+// Index = finger count - 1. `perDeg`: change per degree of hand tilt.
+const CONTROLS = [
+  { key: "volume", label: "Volume", type: "range", min: 0, max: 1, perDeg: 1 / 60, fmt: v => Math.round(v * 100) + "%", ends: ["louder", "quieter"] },
+  { key: "tempo", label: "Tempo", type: "range", min: 40, max: 200, perDeg: 160 / 60, fmt: v => Math.round(v) + " bpm", ends: ["faster", "slower"] },
+  { key: "pattern", label: "Pattern", type: "list", options: PATTERNS },
+  { key: "instrument", label: "Sound", type: "list", options: INSTRUMENTS },
+  { key: "variation", label: "Variation", type: "list", options: VARIATIONS, sus: true },
+];
+const STEP_DEG = 14;                  // hand tilt per list step
+let menu = null;                      // open setting: { i, key, hover, pose0, hist, matching }
+let ctlDirty = true;
+/** Setting value in effect: the one being hovered in an open menu is previewed live. */
+const eff = k => (menu && k in menu.hover) ? menu.hover[k] : S[k];
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const chordFor = deg => buildChord(S.root, S.scale, deg - 1, eff("variation"), eff("sus"));
+
 // ── Synth (Web Audio) ─────────────────────────────────────────────────────
-let actx = null, master = null;
+let actx = null, master = null, pianoWave = null;
+const masterGain = () => { const v = eff("volume"); return v * v * 0.6; };
 function startAudio() {
   if (actx) { actx.resume(); return; }
   actx = new AudioContext();
   const comp = actx.createDynamicsCompressor();
-  master = actx.createGain(); master.gain.value = 0.22;
+  master = actx.createGain(); master.gain.value = masterGain();
   master.connect(comp).connect(actx.destination);
+  const amps = [0, 1, .55, .3, .2, .12, .09, .06, .045, .03, .02, .015, .01];
+  pianoWave = actx.createPeriodicWave(new Float32Array(amps.length), new Float32Array(amps));
 }
 const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
-function chordOn(midi) {
-  if (!actx) return null;
-  const t = actx.currentTime;
-  const env = actx.createGain(); env.gain.value = 0;
-  const lp = actx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 2200; lp.Q.value = 0.6;
-  env.connect(lp).connect(master);
-  env.gain.setValueAtTime(0, t);
-  env.gain.linearRampToValueAtTime(1, t + 0.025);
-  env.gain.setTargetAtTime(0.7, t + 0.025, 0.25);
-  const notes = [midi[0] - 12, ...midi];          // add a bass root an octave down
+/**
+ * One note. `dur` = seconds until release, or null to hold (strings) / ring out (piano).
+ * Strings: two detuned saws through a low-pass. Piano: struck, decaying tone that darkens as it fades.
+ */
+const live = new Set();
+function note(inst, m, t, vel, dur, cutoff = 2400) {
+  const f = mtof(m), g = actx.createGain(), lp = actx.createBiquadFilter();
+  lp.type = "lowpass"; g.connect(lp).connect(master);
+  g.gain.setValueAtTime(0, t);
   const oscs = [];
-  notes.forEach((m, i) => {
-    const g = actx.createGain(); g.gain.value = (i === 0 ? 0.5 : 0.32) / notes.length * 3;
-    g.connect(env);
-    for (const det of [-6, 6]) {
-      const o = actx.createOscillator(); o.type = i === 0 ? "triangle" : "sawtooth";
-      o.frequency.value = mtof(m); o.detune.value = det;
-      o.connect(g); o.start(t); oscs.push(o);
-    }
-  });
-  return { env, oscs };
+  let end = null;
+  if (inst === "piano") {
+    const tc = 0.9 * Math.pow(2, (60 - m) / 24);           // low notes ring longer
+    lp.Q.value = 0.3;
+    lp.frequency.setValueAtTime(Math.min(10000, f * 7 + 600), t);
+    lp.frequency.setTargetAtTime(f * 2 + 250, t, tc * 0.5);
+    g.gain.linearRampToValueAtTime(vel * 1.6, t + 0.005);
+    g.gain.setTargetAtTime(0, t + 0.005, tc);
+    end = t + Math.min(6, tc * 5);
+    for (const det of [-2, 2]) { const o = actx.createOscillator(); o.setPeriodicWave(pianoWave); o.detune.value = det; oscs.push(o); }
+  } else {
+    lp.frequency.value = cutoff; lp.Q.value = 0.6;
+    g.gain.linearRampToValueAtTime(vel, t + 0.03);
+    if (dur) { g.gain.setTargetAtTime(0, t + dur, 0.07); end = t + dur + 0.6; }
+    else g.gain.setTargetAtTime(vel * 0.7, t + 0.03, 0.25);
+    for (const det of [-6, 6]) { const o = actx.createOscillator(); o.type = "sawtooth"; o.detune.value = det; oscs.push(o); }
+  }
+  const n = { g, oscs };
+  oscs.forEach(o => { o.frequency.value = f; o.connect(g); o.start(t); if (end) o.stop(end); });
+  oscs[0].onended = () => live.delete(n);
+  live.add(n);
 }
-function chordOff(v) {
-  if (!v || !actx) return;
+function silence() {
+  if (!actx) return;
   const t = actx.currentTime;
-  v.env.gain.cancelScheduledValues(t);
-  v.env.gain.setValueAtTime(v.env.gain.value, t);
-  v.env.gain.setTargetAtTime(0, t, 0.12);
-  v.oscs.forEach(o => o.stop(t + 0.8));
+  for (const n of live) {
+    n.g.gain.cancelScheduledValues(t);
+    n.g.gain.setValueAtTime(n.g.gain.value, t);
+    n.g.gain.setTargetAtTime(0, t, 0.07);
+    n.oscs.forEach(o => { try { o.stop(t + 0.6); } catch {} });
+  }
+  live.clear();
 }
 
-// ── Playback state: one chord sounds at a time ────────────────────────────
-let current = null;   // { deg, source, voice }
+// Registers. Lower part (a pianist's left hand): root, fifth, root, third from C2 up.
+// Upper part (right hand): the full chord from C4 up, played according to the pattern.
+function lowerNotes(ch) {
+  const r = 36 + ch.midi[0] % 12;
+  return [r, r + ch.fifth, r + 12, r + 12 + ch.third];
+}
+const upperNotes = ch => ch.midi.map(m => m + 12);
+
+function strikeLower(ch, t) {
+  const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).lower;
+  lowerNotes(ch).forEach((m, i) => note(inst, m, t, i === 0 ? 0.2 : 0.14, null, 1500));
+}
+function strikeUpper(ch, t, dur) {
+  const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).upper;
+  upperNotes(ch).forEach(m => note(inst, m, t, 0.14, dur));
+}
+
+// ── Playback: one chord at a time; the pattern runs in eighth-note steps ──
+let current = null;   // { deg, source, ch, step, next }
 function play(deg, source) {
   if (current && current.deg === deg && current.source === source) return;
-  stop();
-  const ch = diatonicChord(S.root, S.scale, deg - 1, S.sevenths);
-  current = { deg, source, voice: chordOn(ch.midi) };
+  silence();
+  resetVariation();
+  startChord(deg, source);
+}
+/** Variation and sus belong to one chord: every newly played chord starts as a plain triad. */
+function resetVariation() {
+  if (S.variation === "triad" && S.sus === 0) return;
+  S.variation = "triad"; S.sus = 0;
+  save(); renderChords(); ctlDirty = true;
+}
+function startChord(deg, source) {
+  const ch = chordFor(deg);
+  current = { deg, source, ch, step: 0, next: 0 };
+  if (actx) {
+    const t = actx.currentTime + 0.01;
+    current.next = t;
+    strikeLower(ch, t);
+    if (eff("pattern") === "sustain") strikeUpper(ch, t, null);
+  }
   renderNow(ch);
 }
 function stop(source) {
   if (!current || (source && current.source !== source)) return;
-  chordOff(current.voice); current = null; renderNow(null);
+  silence(); current = null; renderNow(null);
+}
+/** Restart the sounding chord after a setting changed. */
+function retrigger() {
+  if (!current) return;
+  silence(); startChord(current.deg, current.source);
+}
+function patternStep(c, t, stepDur) {
+  const pattern = eff("pattern"), inst = INSTRUMENTS.find(i => i.id === eff("instrument"));
+  const U = upperNotes(c.ch), n = U.length, k = c.step;
+  if (k > 0 && k % 8 === 0 && inst.lower === "piano") strikeLower(c.ch, t);   // re-strike the decaying bass every bar
+  if (pattern === "pulse") { if (k % 2 === 0) strikeUpper(c.ch, t, stepDur * 1.7); return; }
+  let seq;
+  if (pattern === "up") seq = U.map((_, i) => i);
+  else if (pattern === "down") seq = U.map((_, i) => n - 1 - i);
+  else if (pattern === "updown") seq = [...U.keys(), ...[...U.keys()].slice(1, -1).reverse()];
+  else { seq = []; for (let i = 0; i < n - 1; i++) seq.push(i, n - 1); }       // broken: low, top, middle, top
+  note(inst.upper, U[seq[k % seq.length]], t, 0.3, stepDur * 0.95);
+}
+setInterval(() => {
+  if (!current || !actx || actx.state !== "running" || eff("pattern") === "sustain") return;
+  const now = actx.currentTime;
+  if (current.next < now - 0.2) current.next = now + 0.01;
+  while (current.next < now + 0.1) {
+    const stepDur = 30 / eff("tempo");
+    patternStep(current, current.next, stepDur);
+    current.step++; current.next += stepDur;
+  }
+}, 25);
+
+/** Apply whatever changed in the settings since `oldSig` was taken. */
+const sig = () => [eff("pattern"), eff("instrument"), eff("variation"), eff("sus")].join();
+function refresh(oldSig) {
+  if (actx) master.gain.setTargetAtTime(masterGain(), actx.currentTime, 0.03);
+  if (sig() !== oldSig) { renderChords(); retrigger(); }
+  ctlDirty = true;
+}
+/** Set a setting directly (mouse). */
+function setSetting(key, value) {
+  const old = sig();
+  S[key] = value; if (menu && key in menu.hover) menu.hover[key] = value;
+  save(); refresh(old);
 }
 
 // ── Glove input ──────────────────────────────────────────────────────────
@@ -255,42 +445,55 @@ let latest = null, lastMsgAt = 0;
 const es = new EventSource("/stream");
 es.onmessage = e => { latest = JSON.parse(e.data); lastMsgAt = performance.now(); };
 
+const HANDS = ["right", "left"];
+const H = { right: { bends: [0, 0, 0, 0, 0], down: [false, false, false, false, false] },
+            left:  { bends: [0, 0, 0, 0, 0], down: [false, false, false, false, false] } };
+/** Sensor data of the glove playing the role `name` ("right" = chords, "left" = settings). */
+function handData(name) {
+  const src = S.swap ? (name === "right" ? "left" : "right") : name;
+  const h = latest && latest.hands && latest.hands[src];
+  return h && h.groups.default ? h.groups.default.s : null;
+}
 const angleDeg = q => 2 * Math.acos(Math.min(1, Math.abs(q[3]))) * 180 / Math.PI;
-function rawAngles() {
-  const g = latest && latest.groups.default;
-  if (!g) return null;
+function rawAngles(name) {
+  const s = handData(name);
+  if (!s) return null;
   return FINGERS.map(f => {
-    const T = g.s[f.id] && g.s[f.id]["TRANSFORM@hub"];
+    const T = s[f.id] && s[f.id]["TRANSFORM@hub"];
     return T ? angleDeg(T.slice(3, 7)) : null;
   });
 }
 const ON = 0.6, OFF = 0.4;            // hysteresis on normalized bend
-const down = [false, false, false, false, false];
-let bends = [0, 0, 0, 0, 0];
-let countCandidate = null, countSince = 0, activeTapFinger = -1;
+/** Update bends / curled flags for one hand. False if that glove has no data. */
+function readHand(name) {
+  const raw = rawAngles(name);
+  if (!raw) return false;
+  const h = H[name], cal = S.cal[name];
+  h.bends = raw.map((a, i) => {
+    if (a == null) return 0;
+    const span = cal.fist[i] - cal.open[i];
+    return Math.abs(span) < 5 ? 0 : (a - cal.open[i]) / span;
+  });
+  h.bends.forEach((b, i) => { h.down[i] = h.down[i] ? b > OFF : b > ON; });
+  return true;
+}
 
-// Tap-mode finger combinations (finger indices: 0 thumb, 1 index, 2 middle, 3 ring, 4 little).
-// A combo matches when exactly its fingers are curled. The ring finger is anatomically linked to
-// the little finger, so in combos that use the little finger the ring finger is ignored.
+// Right-hand combinations: the listed fingers are UP, the rest curled
+// (finger indices: 0 thumb, 1 index, 2 middle, 3 ring, 4 little).
+// 6–8 are the 1–3 shapes with the little finger raised too. The ring finger is anatomically linked
+// to the little finger, so in combos that use the little finger the ring finger is ignored.
 // `def` is the default degree; the user can remap each one (stored in S.comboMap by id; 0 = stop).
-const COMBOS = [
-  { id: "tap8", def: 8, fingers: [0, 1, 2] },      // thumb + index + middle -> I, octave up
-  { id: "tap7", def: 7, fingers: [0, 1, 4] },      // thumb + index + little -> VII
-  { id: "tap6", def: 6, fingers: [0, 4] },         // thumb + little         -> VI
-];
-// Count-mode combinations: the listed fingers are UP, the rest curled.
-// 6–8 are the 1–3 shapes with the little finger raised too.
 const COUNT_COMBOS = [
   { id: "cnt4b", def: 4, fingers: [1, 2, 3, 4] },  // index + middle + ring + little up -> second way to play 4
   { id: "cnt8", def: 8, fingers: [0, 1, 2, 4] },   // thumb + index + middle + little up -> I, octave up
   { id: "cnt7", def: 7, fingers: [0, 1, 4] },      // thumb + index + little up -> VII
   { id: "cnt6", def: 6, fingers: [0, 4] },         // thumb + little up         -> VI
 ];
-const FIST = { id: "fist", def: 0, fingers: [] };   // count mode: all curled -> stop by default
+const FIST = { id: "fist", def: 0, fingers: [] };   // all curled -> stop by default
 const RING_FOLLOWS_LITTLE = true;
-const SETTLE_MS = 90;                 // a gesture must hold this long before it sounds
-/** `active[i]` = finger i is part of the gesture (curled for tap combos, up for count combos). */
-function matchCombo(active, combos = COMBOS) {
+const SETTLE_MS = 150;                // a gesture must hold this long before it counts
+/** `active[i]` = finger i is up. */
+function matchCombo(active, combos = COUNT_COMBOS) {
   for (const c of combos) {
     const ignoreRing = RING_FOLLOWS_LITTLE && c.fingers.includes(4) && !c.fingers.includes(3);
     const ok = [0, 1, 2, 3, 4].every(i => (ignoreRing && i === 3) || active[i] === c.fingers.includes(i));
@@ -300,7 +503,6 @@ function matchCombo(active, combos = COMBOS) {
 }
 /** The degree a combo is mapped to (0 = stop). */
 const comboDeg = c => S.comboMap[c.id] ?? c.def;
-let tapCandidate = undefined, tapSince = 0;
 
 /** 0 = fist, 1..5 = thumb..little extended in order with the rest curled, -1 = any other shape. */
 function orderedCount(curled) {
@@ -310,57 +512,135 @@ function orderedCount(curled) {
 }
 const COUNT_LABELS = ["Thumb", "Thumb + Index", "Thumb + Index + Middle", "Thumb + Index + Middle + Ring", "All five"];
 
-function tick() {
-  const raw = rawAngles();
-  if (!raw) return;
-  bends = raw.map((a, i) => {
-    if (a == null) return 0;
-    const span = S.cal.fist[i] - S.cal.open[i];
-    return Math.abs(span) < 5 ? 0 : (a - S.cal.open[i]) / span;
-  });
-  const prev = down.slice();
-  bends.forEach((b, i) => { down[i] = down[i] ? b > OFF : b > ON; });
+// Right hand: chords. Ordered count N = the first N fingers up and the rest curled; combos next.
+// Fist = stop; any other shape = no change.
+let countCandidate = null, countSince = 0;
+function rightTick(now) {
+  if (!readHand("right")) return;
+  const down = H.right.down, n = orderedCount(down);
+  const target = n === 0 ? comboDeg(FIST)
+    : n > 0 ? S.countMap[n - 1]
+    : matchCombo(down.map(c => !c)) ?? -1;
+  if (target !== countCandidate) { countCandidate = target; countSince = now; }
+  else if (now - countSince > SETTLE_MS) {
+    if (target === 0) stop("glove"); else if (target > 0) play(target, "glove");
+  }
+}
 
-  if (S.mode === "tap") {
-    // Combos first; otherwise the newest curled finger wins (falling back to any other still-curled finger).
-    for (let i = 0; i < 5; i++) if (down[i] && !prev[i]) activeTapFinger = i;
-    if (activeTapFinger >= 0 && !down[activeTapFinger]) activeTapFinger = down.findIndex(Boolean);
-    const target = matchCombo(down) ?? (activeTapFinger >= 0 ? S.tapMap[activeTapFinger] : 0);
-    const now = performance.now();
-    if (target !== tapCandidate) { tapCandidate = target; tapSince = now; }
-    else if (now - tapSince >= SETTLE_MS) {
-      if (target) play(target, "glove"); else stop("glove");
+// ── Left hand: settings menu ─────────────────────────────────────────────
+// Hub orientation is a quaternion [x, y, z, w], hub -> world (NED: z points down).
+// Hub frame: -Y points along the fingers, +Y toward the wrist.
+function qrot(q, v) {
+  const [x, y, z, w] = q;
+  const tx = 2*(y*v[2] - z*v[1]), ty = 2*(z*v[0] - x*v[2]), tz = 2*(x*v[1] - y*v[0]);
+  return [v[0] + w*tx + (y*tz - z*ty), v[1] + w*ty + (z*tx - x*tz), v[2] + w*tz + (x*ty - y*tx)];
+}
+function qmul(a, b) {
+  const [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
+  return [aw*bx + ax*bw + ay*bz - az*by, aw*by - ax*bz + ay*bw + az*bx,
+          aw*bz + ax*by - ay*bx + az*bw, aw*bw - ax*bx - ay*by - az*bz];
+}
+let pitchEma = null;
+/** { pitch: how far the fingers point above horizontal (deg), q } or null without hub orientation. */
+function leftPose() {
+  const s = handData("left");
+  const q = s && s.hub && s.hub["ORIENTATION@LTP_NED"];
+  if (!q) return null;
+  const pitch = Math.asin(clamp(-qrot(q, [0, -1, 0])[2], -1, 1)) * 180 / Math.PI;
+  pitchEma = pitchEma == null ? pitch : pitchEma + 0.3 * (pitch - pitchEma);
+  return { pitch: pitchEma, q };
+}
+/** Wrist twist since q0 in degrees, positive = rotated to the left (anticlockwise seen from the wrist). */
+function twistDeg(q0, q) {
+  const rel = qmul([-q0[0], -q0[1], -q0[2], q0[3]], q);
+  let a = 2 * Math.atan2(rel[1], rel[3]) * 180 / Math.PI;
+  if (a > 180) a -= 360; else if (a < -180) a += 360;
+  return a;
+}
+
+function openMenu(i, pose) {
+  const old = sig(), c = CONTROLS[i];
+  const hover = { [c.key]: S[c.key] };
+  if (c.sus) hover.sus = 0;           // wrist centred = normal third
+  menu = { i, key: c.key, hover, pose0: pose, hist: [], matching: true };
+  refresh(old);
+}
+function closeMenu(commit) {
+  const old = sig();
+  if (commit) { Object.assign(S, menu.hover); save(); }
+  menu = null;
+  refresh(old);
+}
+function updateHover(pose, now) {
+  const c = CONTROLS[menu.i], h = menu.hover, old = sig();
+  if (pose && !menu.pose0) menu.pose0 = pose;
+  if (pose) {
+    const d = (pose.pitch - menu.pose0.pitch) * (S.invTilt ? -1 : 1);
+    if (c.type === "range") h[c.key] = clamp(S[c.key] + d * c.perDeg, c.min, c.max);
+    else {
+      const idx = id => c.options.findIndex(o => o.id === id);
+      const pos = idx(S[c.key]) - d / STEP_DEG, cur = idx(h[c.key]);
+      if (Math.abs(pos - cur) > 0.65) h[c.key] = c.options[clamp(Math.round(pos), 0, c.options.length - 1)].id;
     }
-  } else {
-    // Ordered count: N = the first N fingers (thumb, index, middle, ring, little) up and the rest curled.
-    // Count combos (6, 7) next. Fist = stop; any other shape = no change. Must be stable for 150 ms.
-    const n = orderedCount(down);
-    const target = n === 0 ? comboDeg(FIST)
-      : n > 0 ? S.countMap[n - 1]
-      : matchCombo(down.map(c => !c), COUNT_COMBOS) ?? -1;
-    const now = performance.now();
-    if (target !== countCandidate) { countCandidate = target; countSince = now; }
-    else if (now - countSince > 150) {
-      if (target === 0) stop("glove"); else if (target > 0) play(target, "glove");
+    if (c.sus) {
+      const r = twistDeg(menu.pose0.q, pose.q) * (S.invRoll ? -1 : 1);
+      h.sus = r > (h.sus === 2 ? 12 : 22) ? 2 : r < -(h.sus === 4 ? 12 : 22) ? 4 : 0;
     }
   }
+  menu.hist.push({ t: now, h: { ...h } });
+  while (menu.hist.length > 1 && menu.hist[1].t < now - 400) menu.hist.shift();
+  refresh(old);
+}
+
+let leftCandidate = null, leftSince = 0;
+function leftTick(now) {
+  if (!readHand("left")) return;
+  const down = H.left.down;
+  let n = orderedCount(down);
+  if (n < 0 && down[0] && !down[1] && !down[2] && !down[3] && !down[4]) n = 4;   // four fingers, thumb tucked
+  if (n !== leftCandidate) { leftCandidate = n; leftSince = now; }
+  const held = now - leftSince;
+  const pose = leftPose();
+  // Opening needs a settled shape; switching away from an open menu needs longer, because closing
+  // the fist passes through lower counts on the way.
+  if (n > 0 && (!menu ? held >= SETTLE_MS : menu.i !== n - 1 && held >= 400)) {
+    if (menu) closeMenu(false);
+    openMenu(n - 1, pose);
+  } else if (n === 0 && menu && held >= 120) closeMenu(true);
+  if (!menu) return;
+  const matching = n === menu.i + 1;
+  if (matching) updateHover(pose, now);
+  else if (menu.matching) {
+    // The hand started changing shape: go back to where it pointed just before, so that
+    // the movement of closing the fist doesn't nudge the choice.
+    const past = menu.hist.filter(e => e.t <= now - 150).pop() || menu.hist[0];
+    if (past) { const old = sig(); menu.hover = { ...past.h }; refresh(old); }
+  }
+  menu.matching = matching;
+}
+
+function tick() {
+  const now = performance.now();
+  rightTick(now); leftTick(now);
 }
 
 // ── Calibration (average ~0.5 s of samples) ──────────────────────────────
 function calibrate(which) {
-  const samples = [];
+  const samples = { right: [], left: [] };
   const btn = $(which === "open" ? "calOpen" : "calFist");
   btn.disabled = true;
   const iv = setInterval(() => {
-    const r = rawAngles(); if (r && r.every(a => a != null)) samples.push(r);
-    if (samples.length >= 25) {
-      clearInterval(iv); btn.disabled = false;
-      S.cal[which] = [0, 1, 2, 3, 4].map(i => samples.reduce((s, r) => s + r[i], 0) / samples.length);
-      save();
-      $("calHelp").textContent = `Calibrated ${which}: ` + S.cal[which].map(a => a.toFixed(0) + "°").join(" / ");
-    }
+    HANDS.forEach(h => { const r = rawAngles(h); if (r && r.every(a => a != null)) samples[h].push(r); });
   }, 20);
-  setTimeout(() => { if (btn.disabled) { clearInterval(iv); btn.disabled = false; $("calHelp").textContent = "No glove data — calibration skipped."; } }, 3000);
+  setTimeout(() => {
+    clearInterval(iv); btn.disabled = false;
+    const done = HANDS.filter(h => samples[h].length >= 10);
+    done.forEach(h => { S.cal[h][which] = [0, 1, 2, 3, 4].map(i => samples[h].reduce((s, r) => s + r[i], 0) / samples[h].length); });
+    save();
+    $("calHelp").textContent = done.length
+      ? `Calibrated ${which}: ` + done.map(h => `${h} ` + S.cal[h][which].map(a => a.toFixed(0) + "°").join(" / ")).join("  ·  ")
+      : "No glove data — calibration skipped.";
+  }, 600);
 }
 $("calOpen").onclick = () => calibrate("open");
 $("calFist").onclick = () => calibrate("fist");
@@ -371,8 +651,7 @@ function fill(sel, items, value) {
 }
 fill($("root"), ROOTS, S.root);
 fill($("scale"), Object.keys(SCALES), S.scale);
-$("sevenths").checked = S.sevenths;
-$("mode").value = S.mode;
+["swap", "invTilt", "invRoll"].forEach(id => { $(id).checked = S[id]; $(id).onchange = () => { S[id] = $(id).checked; save(); }; });
 
 function renderNow(ch) {
   $("now").classList.toggle("idle", !ch);
@@ -382,7 +661,7 @@ function renderNow(ch) {
   document.querySelectorAll(".chord").forEach(el => el.classList.toggle("active", !!ch && +el.dataset.deg === ch.degree));
 }
 
-// ── Hand pictogram: back of a right hand, thumb on the left. up[i] = finger i extended. ──
+// ── Hand pictogram: back of a right hand, thumb on the left (mirrored for the left hand). up[i] = finger i extended. ──
 const FINGER_GEOM = [                  // base point on the palm and tip when extended
   { base: [33, 80], tip: [9, 52],  fold: [52, 72] },   // thumb (folds across the palm)
   { base: [37, 56], tip: [33, 16] },                   // index
@@ -390,7 +669,7 @@ const FINGER_GEOM = [                  // base point on the palm and tip when ex
   { base: [63, 56], tip: [66, 14] },                   // ring
   { base: [75, 61], tip: [82, 30] },                   // little
 ];
-function handSVG(up, size = 44, title = "") {
+function handSVG(up, size = 44, title = "", mirror = false) {
   const seg = (a, b, color, op) =>
     `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${color}" stroke-opacity="${op}" stroke-width="11" stroke-linecap="round"/>`;
   let curled = "", extended = "";
@@ -401,19 +680,15 @@ function handSVG(up, size = 44, title = "") {
   });
   return `<svg class="hand" width="${size}" height="${size * 1.1}" viewBox="0 0 100 110" role="img" aria-label="${title}">` +
     (title ? `<title>${title}</title>` : "") +
+    `<g${mirror ? ' transform="translate(100,0) scale(-1,1)"' : ""}>` +
     `<rect x="27" y="52" width="58" height="52" rx="16" fill="#2a2f3a" stroke="#3d4452" stroke-width="2"/>` +
-    extended + curled + `</svg>`;
+    extended + curled + `</g></svg>`;
 }
-const upExcept = curledIdx => [0, 1, 2, 3, 4].map(i => !curledIdx.includes(i));
 const upOnly = upIdx => [0, 1, 2, 3, 4].map(i => upIdx.includes(i));
 const names = idx => idx.map(i => FINGERS[i].label).join(" + ");
 
-/** Every gesture that plays `deg` in the current mode, as [{up, title}]. */
+/** Every right-hand gesture that plays `deg`, as [{up, title}]. */
 function gesturesFor(deg) {
-  if (S.mode === "tap") return [
-    ...FINGERS.map((f, i) => S.tapMap[i] === deg ? { up: upExcept([i]), title: `${f.label} curled` } : null).filter(Boolean),
-    ...COMBOS.filter(c => comboDeg(c) === deg).map(c => ({ up: upExcept(c.fingers), title: `${names(c.fingers)} curled` })),
-  ];
   return [
     ...S.countMap.map((d, i) => d === deg ? { up: upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), title: `${COUNT_LABELS[i]} up` } : null).filter(Boolean),
     ...[...COUNT_COMBOS, FIST].filter(c => comboDeg(c) === deg).map(c => ({ up: upOnly(c.fingers), title: c === FIST ? "Fist" : `${names(c.fingers)} up` })),
@@ -425,12 +700,60 @@ function whoPlays(deg) {
 
 function renderChords() {
   $("chords").innerHTML = [1, 2, 3, 4, 5, 6, 7, 8].map(d => {
-    const ch = diatonicChord(S.root, S.scale, d - 1, S.sevenths);
+    const ch = chordFor(d);
     return `<div class="chord" data-deg="${d}"><div class="deg">degree ${d}</div><div class="r">${ch.roman}</div><div class="n">${ch.name}</div><div class="who">${whoPlays(d)}</div></div>`;
   }).join("");
   document.querySelectorAll(".chord").forEach(el => {
     el.onpointerdown = () => { startAudio(); setAudioBtn(); play(+el.dataset.deg, "ui"); };
-    el.onpointerup = el.onpointerleave = () => stop("ui");
+    el.onpointerleave = () => stop("ui");
+  });
+  if (current) renderNow(chordFor(current.deg));
+}
+
+// ── Left-hand settings panel ─────────────────────────────────────────────
+function buildControls() {
+  $("controls").innerHTML = CONTROLS.map((c, i) => {
+    const hands = handSVG(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), 40, `Left hand: ${COUNT_LABELS[i]} up`, true)
+      + (i === 3 ? handSVG(upOnly([1, 2, 3, 4]), 40, "Left hand: four fingers up, thumb tucked", true) : "");
+    const body = c.type === "range"
+      ? `<div class="meterwrap"><div class="meter" data-key="${c.key}"><i></i><b></b></div><div class="ends"><span>▲ ${c.ends[0]}</span><span>▼ ${c.ends[1]}</span></div></div>`
+      : `<div class="opts">${c.options.map(o => `<div class="opt" data-key="${c.key}" data-v="${o.id}">${o.label}</div>`).join("")}</div>`
+        + (c.sus ? `<div class="sus">${[[2, "‹ sus2"], [0, "normal"], [4, "sus4 ›"]].map(([v, l]) => `<div class="opt" data-key="sus" data-v="${v}">${l}</div>`).join("")}</div>` : "");
+    return `<div class="ctl" id="ctl${i}"><div class="ctlhead"><div class="hands">${hands}</div><div><div class="cname">${i + 1} · ${c.label}</div><div class="cval"></div></div></div>${body}<div class="hint"></div></div>`;
+  }).join("");
+  $("controls").querySelectorAll(".opt").forEach(el => el.onclick = () => {
+    const key = el.dataset.key;
+    setSetting(key, key === "sus" ? +el.dataset.v : el.dataset.v);
+  });
+  $("controls").querySelectorAll(".meter").forEach(el => {
+    const c = CONTROLS.find(c => c.key === el.dataset.key);
+    const set = e => { const r = el.getBoundingClientRect(); setSetting(c.key, c.max - clamp((e.clientY - r.top) / r.height, 0, 1) * (c.max - c.min)); };
+    el.onpointerdown = e => { el.setPointerCapture(e.pointerId); set(e); };
+    el.onpointermove = e => { if (e.buttons) set(e); };
+  });
+}
+function renderControls() {
+  ctlDirty = false;
+  CONTROLS.forEach((c, i) => {
+    const el = $("ctl" + i), active = !!menu && menu.i === i, v = eff(c.key);
+    el.classList.toggle("active", active);
+    if (c.type === "range") {
+      const pct = x => (x - c.min) / (c.max - c.min) * 100;
+      el.querySelector(".cval").textContent = c.fmt(v);
+      el.querySelector(".meter > i").style.height = pct(v) + "%";
+      el.querySelector(".meter > b").style.bottom = `calc(${pct(S[c.key])}% - 1px)`;
+    } else {
+      const sus = eff("sus"), susOk = susAllowed(eff("variation"), sus);
+      el.querySelector(".cval").textContent = c.options.find(o => o.id === v).label + (c.sus && sus && susOk ? ` sus${sus}` : "");
+      el.querySelectorAll(".opt").forEach(o => {
+        const isSus = o.dataset.key === "sus", val = isSus ? +o.dataset.v : o.dataset.v;
+        o.classList.toggle("sel", S[o.dataset.key] === val);
+        o.classList.toggle("hover", active && eff(o.dataset.key) === val);
+        if (isSus) o.classList.toggle("na", !susAllowed(eff("variation"), val));
+      });
+    }
+    el.querySelector(".hint").textContent = !active ? ""
+      : (c.sus ? "tilt ▲▼ · twist wrist ‹ › · fist = select" : "tilt ▲▼ · fist = select");
   });
 }
 
@@ -439,57 +762,52 @@ function renderMap() {
     + `<option value="0"${v === 0 ? " selected" : ""}>stop</option>`;
   // Each row: a hand drawing + a dropdown. `key` says where the choice is stored.
   const row = (up, title, value, key) => `${handSVG(up, 44, title)}<select data-key="${key}" title="${title}">${opts(value)}</select>`;
-  if (S.mode === "tap") {
-    $("mapTitle").textContent = "Mapping: gesture → degree";
-    $("map").innerHTML = FINGERS.map((f, i) => row(upExcept([i]), `${f.label} curled`, S.tapMap[i], `tap:${i}`)).join("")
-      + COMBOS.slice().reverse().map(c => row(upExcept(c.fingers), `${names(c.fingers)} curled`, comboDeg(c), `combo:${c.id}`)).join("");
-    $("modeHelp").textContent = "Curl a finger past the line to play its chord; open it to release. Combos (curl those fingers together) win over single fingers; a gesture must hold ~0.1 s. Ring finger is ignored in combos that use the little finger.";
-  } else {
-    $("mapTitle").textContent = "Mapping: gesture → degree";
-    $("map").innerHTML = [0, 1, 2, 3, 4].map(i => row(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), `${COUNT_LABELS[i]} up`, S.countMap[i], `count:${i}`)).join("")
-      + COUNT_COMBOS.slice().reverse().map(c => row(upOnly(c.fingers), `${names(c.fingers)} up`, comboDeg(c), `combo:${c.id}`)).join("")
-      + row(upOnly([]), "Fist", comboDeg(FIST), `combo:${FIST.id}`);
-    $("modeHelp").textContent = "Raise fingers in order from the thumb: thumb = 1, thumb + index = 2, … all five = 5; the other fingers stay curled. 4 also works as the four fingers up with the thumb tucked. Fist stops by default. Any shape not shown keeps the current chord.";
-  }
+  $("map").innerHTML = [0, 1, 2, 3, 4].map(i => row(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), `${COUNT_LABELS[i]} up`, S.countMap[i], `count:${i}`)).join("")
+    + COUNT_COMBOS.slice().reverse().map(c => row(upOnly(c.fingers), `${names(c.fingers)} up`, comboDeg(c), `combo:${c.id}`)).join("")
+    + row(upOnly([]), "Fist", comboDeg(FIST), `combo:${FIST.id}`);
+  $("modeHelp").textContent = "Right hand only. Raise fingers in order from the thumb: thumb = 1, thumb + index = 2, … all five = 5; the other fingers stay curled. 4 also works as the four fingers up with the thumb tucked. Fist stops by default. Any shape not shown keeps the current chord.";
   $("map").querySelectorAll("select").forEach(sel => sel.onchange = () => {
     const [kind, k] = sel.dataset.key.split(":"), v = +sel.value;
-    if (kind === "tap") S.tapMap[+k] = v;
-    else if (kind === "count") S.countMap[+k] = v;
+    if (kind === "count") S.countMap[+k] = v;
     else S.comboMap = { ...S.comboMap, [k]: v };
     save(); renderChords();
   });
 }
 
-$("fingers").innerHTML = FINGERS.map((f, i) => `
+$("fingers").innerHTML = HANDS.map(h => `<div class="handname">${h === "right" ? "Right hand · chords" : "Left hand · settings"}</div>` + FINGERS.map((f, i) => `
   <div class="frow"><div class="fname"><span class="sw" style="background:${f.hex}"></span>${f.label}</div>
-  <div class="bar"><i id="b${i}" style="background:${f.hex}"></i><div class="th" style="left:${ON * 100}%"></div></div>
-  <div class="val" id="v${i}">–</div></div>`).join("");
+  <div class="bar"><i id="b${h}${i}" style="background:${f.hex}"></i><div class="th" style="left:${ON * 100}%"></div></div>
+  <div class="val" id="v${h}${i}">–</div></div>`).join("")).join("");
 
 function onSettingsChange() {
-  S.root = $("root").value; S.scale = $("scale").value; S.sevenths = $("sevenths").checked; S.mode = $("mode").value;
+  S.root = $("root").value; S.scale = $("scale").value;
   save(); stop(); renderChords(); renderMap();
 }
-["root", "scale", "sevenths", "mode"].forEach(id => $(id).onchange = onSettingsChange);
+["root", "scale"].forEach(id => $(id).onchange = onSettingsChange);
 
 function setAudioBtn() { const on = actx && actx.state === "running"; $("audioBtn").textContent = on ? "Audio on" : "Start audio"; $("audioBtn").classList.toggle("on", !!on); }
 $("audioBtn").onclick = () => { startAudio(); setTimeout(setAudioBtn, 50); };
 
+// Released anywhere (the cards are re-drawn when the variation changes, so don't rely on the card itself).
+window.addEventListener("pointerup", () => stop("ui"));
 // Keyboard audition: hold 1–8.
 window.addEventListener("keydown", e => { const d = +e.key; if (d >= 1 && d <= 8 && !e.repeat) { startAudio(); setAudioBtn(); play(d, "key" + d); } });
 window.addEventListener("keyup", e => { const d = +e.key; if (d >= 1 && d <= 8) stop("key" + d); });
 
 setInterval(tick, 10);
 setInterval(() => {
-  bends.forEach((b, i) => {
-    $("b" + i).style.width = `${Math.max(0, Math.min(1, b)) * 100}%`;
-    const v = $("v" + i); v.textContent = `${Math.round(b * 100)}%`; v.classList.toggle("down", down[i]);
-  });
+  HANDS.forEach(h => H[h].bends.forEach((b, i) => {
+    $("b" + h + i).style.width = `${clamp(b, 0, 1) * 100}%`;
+    const v = $("v" + h + i); v.textContent = `${Math.round(b * 100)}%`; v.classList.toggle("down", H[h].down[i]);
+  }));
+  if (ctlDirty) renderControls();
   const live = latest && performance.now() - lastMsgAt < 1500 && latest.status.startsWith("streaming");
   $("status").classList.toggle("live", !!live);
-  $("statusText").textContent = latest ? latest.status : "waiting for visualizer server…";
+  const missing = live ? HANDS.filter(h => !handData(h)).map(h => `no ${h}-hand glove`).join(", ") : "";
+  $("statusText").textContent = latest ? latest.status + (missing ? ` · ${missing}` : "") : "waiting for visualizer server…";
 }, 60);
 
-renderChords(); renderMap(); renderNow(null);
+buildControls(); renderChords(); renderMap(); renderNow(null);
 </script>
 </body>
 </html>
