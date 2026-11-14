@@ -14,20 +14,28 @@
   * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
   .app { display: grid; grid-template-columns: 330px minmax(0, 1fr); min-height: 100vh; }
-  .side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 14px 0 12px 14px; display: flex; flex-direction: column; gap: 12px; }
-  .side .panel { padding: 14px; }
-  .side .grow { flex: 1; display: flex; flex-direction: column; min-height: 180px; }
+  .side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 12px 0 10px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .side .panel { padding: 12px; flex: none; }
+  .side h2 { margin-bottom: 8px; }
+  .side .simbox { display: flex; flex-direction: column; height: 158px; }
   .canvasbox { position: relative; flex: 1; min-height: 0; }
   .canvasbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  #viz { display: block; width: 100%; height: 64px; }
-  .wrap { max-width: 1120px; margin: 0 auto; padding: 14px 16px 40px; min-width: 0; width: 100%; }
-  .wrap > .panel { margin-bottom: 14px; }
+  #viz { display: block; width: 100%; height: 62px; }
+  .wrap { padding: 12px; min-width: 0; min-height: 100vh; display: flex; flex-direction: column; gap: 12px; }
+  .wrap > * { flex: none; transition: opacity .2s; }
+  .wrap > .fill { flex: 1; display: flex; flex-direction: column; }
+  .wrap.locked > * { opacity: .45; }
   @media (max-width: 900px) {
     .app { grid-template-columns: 1fr; }
-    .side { position: static; height: auto; padding: 14px 16px 0; }
+    .side { position: static; height: auto; padding: 12px 12px 0; }
+    .wrap { min-height: 0; }
   }
-  header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-bottom: 18px; }
-  h1 { font-size: 18px; margin: 0 12px 0 0; }
+  .top { display: flex; flex-direction: column; gap: 8px; }
+  .top .titlerow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .top select { flex: 1; min-width: 0; }
+  .top label.inline span { width: 40px; }
+  h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+  button.primary { padding: 6px 22px; }
   label.inline { display: flex; align-items: center; gap: 6px; color: var(--muted); }
   select, button { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; font: inherit; }
   button { cursor: pointer; }
@@ -37,14 +45,14 @@
   .conn .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e5484d; margin-right: 7px; }
   .conn .live .dot { background: var(--accent); }
 
-  .now { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; margin-bottom: 14px; display: flex; align-items: center; gap: 24px; }
+  .now { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; display: flex; align-items: center; gap: 24px; }
   .now .label { flex: none; min-width: 150px; text-align: left; }
   .now .roman { font-size: 52px; font-weight: 700; line-height: 1; letter-spacing: -.02em; white-space: nowrap; }
   .now .name { font-size: 20px; margin-top: 8px; color: var(--muted); white-space: nowrap; }
   .now.idle .roman { color: #3a404d; }
   #piano { flex: 1; min-width: 0; }
   #piano svg { display: block; width: 100%; height: auto; }
-  #piano .wk { fill: #d5d9e0; }
+  #piano .wk { fill: var(--muted); }
   #piano .bk { fill: #12141a; }
   #piano .wk.on { fill: var(--accent); }
   #piano .bk.on { fill: #2fa868; stroke: var(--accent); stroke-width: .8; }
@@ -63,27 +71,23 @@
   @media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
   .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
   h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
-  .frow { display: grid; grid-template-columns: 66px 1fr 40px; align-items: center; gap: 8px; margin: 4px 0; }
-  .fname { display: flex; align-items: center; gap: 7px; }
-  .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+  .frow { display: grid; grid-template-columns: 66px 1fr 40px; align-items: center; gap: 8px; margin: 3px 0; }
   .bar { position: relative; height: 12px; background: #232733; border-radius: 6px; overflow: hidden; }
   .bar > i { display: block; height: 100%; width: 0; }
   .bar .th { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff6; left: 50%; }
   .val { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
   .val.down { color: var(--text); font-weight: 600; }
-  .btns { display: flex; gap: 8px; margin-top: 12px; }
-  .btns button { flex: auto; white-space: nowrap; padding: 6px 8px; font-size: 13px; }
-  .cal { color: var(--muted); font-size: 12px; margin-top: 10px; font-variant-numeric: tabular-nums; }
-  .cal b { display: block; color: var(--text); font-weight: 600; margin-top: 6px; }
+  .btns { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .btns button { padding: 5px 8px; font-size: 13px; }
   .help { color: var(--muted); font-size: 12px; margin-top: 12px; }
-  .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; flex: 1; }
   @media (max-width: 1150px) { .controls { grid-template-columns: repeat(2, 1fr); } }
   .ctl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
   .ctl.active { border-color: var(--accent); background: #1f3a2c; }
   .ctlhead { display: flex; align-items: center; gap: 8px; min-height: 50px; }
   .ctlhead .hands { display: flex; flex: none; }
-  .cname { font-size: 12px; color: var(--muted); }
-  .cval { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .cname { font-size: 15px; font-weight: 700; }
+  .ends .cval { font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .meterwrap { display: flex; gap: 8px; flex: 1; min-height: 150px; }
   .meter { position: relative; width: 34px; background: #232733; border-radius: 6px; overflow: hidden; cursor: pointer; touch-action: none; }
   .meter > i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--muted); }
@@ -108,8 +112,13 @@
 <body>
 <div class="app">
   <aside class="side">
+    <div class="panel top">
+      <div class="titlerow"><h1>Glove Chords</h1><button class="primary" id="audioBtn">Start</button></div>
+      <label class="inline"><span>Key</span><select id="root"></select></label>
+      <label class="inline"><span>Scale</span><select id="scale"></select></label>
+    </div>
     <div class="panel"><canvas id="viz"></canvas></div>
-    <div class="panel grow">
+    <div class="panel simbox">
       <h2>Simulated hands</h2>
       <div class="canvasbox"><canvas id="sim"></canvas></div>
     </div>
@@ -117,10 +126,9 @@
       <h2>Detected input</h2>
       <div id="fingers"></div>
       <div class="btns">
-        <button id="calOpen">Calibrate: open hands</button>
-        <button id="calFist">Calibrate: fists</button>
+        <button id="calOpen">Calibrate open hands</button>
+        <button id="calFist">Calibrate fists</button>
       </div>
-      <div class="cal" id="calInfo"></div>
     </div>
     <div class="conn">
       <div id="connright"><span class="dot"></span>Right hand: <span>Disconnected</span></div>
@@ -128,14 +136,7 @@
     </div>
   </aside>
 
-  <main class="wrap">
-    <header>
-      <h1>Glove Chords</h1>
-      <button class="primary" id="audioBtn">Start audio</button>
-      <label class="inline">Key <select id="root"></select></label>
-      <label class="inline">Scale <select id="scale"></select></label>
-    </header>
-
+  <main class="wrap locked" id="main">
     <div class="now idle" id="now">
       <div class="label">
         <div class="roman" id="nowRoman">–</div>
@@ -149,7 +150,7 @@
       <div class="chords" id="chords"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel fill">
       <h2>Left hand</h2>
       <div class="controls" id="controls"></div>
     </div>
@@ -294,19 +295,19 @@ const PATTERNS = [
   { id: "sustain", label: "Sustain" }, { id: "pulse", label: "Pulse" }, { id: "broken", label: "Broken chord" },
 ];
 const INSTRUMENTS = [
-  { id: "strings", label: "Strings + strings", lower: "strings", upper: "strings" },
-  { id: "mix",     label: "Strings low + piano high", lower: "strings", upper: "piano" },
-  { id: "piano",   label: "Piano + piano", lower: "piano", upper: "piano" },
+  { id: "strings", label: "Strings + Strings", lower: "strings", upper: "strings" },
+  { id: "mix",     label: "Strings low + Piano high", lower: "strings", upper: "piano" },
+  { id: "piano",   label: "Piano + Piano", lower: "piano", upper: "piano" },
 ];
 // Index = finger count - 1. `perDeg`: change per degree of hand tilt.
 const CONTROLS = [
-  { key: "volume", label: "Volume", type: "range", min: 0, max: 1, perDeg: 1 / 60, fmt: v => Math.round(v * 100) + "%", ends: ["louder", "quieter"] },
-  { key: "tempo", label: "Tempo", type: "range", min: 40, max: 200, perDeg: 160 / 60, fmt: v => Math.round(v) + " bpm", ends: ["faster", "slower"] },
+  { key: "volume", label: "Volume", type: "range", min: 0, max: 1, perDeg: 1 / 60, fmt: v => Math.round(v * 100) + "%", ends: ["Louder", "Quieter"] },
+  { key: "tempo", label: "Tempo", type: "range", min: 40, max: 200, perDeg: 160 / 60, fmt: v => Math.round(v) + " bpm", ends: ["Faster", "Slower"] },
   { key: "pattern", label: "Pattern", type: "list", options: PATTERNS,
     twist: { key: "span", left: 1, centre: 2, right: 3, labels: ["‹ 1 oct", "2 oct", "3 oct ›"] } },
   { key: "instrument", label: "Sound", type: "list", options: INSTRUMENTS },
   { key: "variation", label: "Variation", type: "list", options: VARIATIONS,
-    twist: { key: "sus", left: 2, centre: 0, right: 4, labels: ["‹ sus2", "normal", "sus4 ›"] } },
+    twist: { key: "sus", left: 2, centre: 0, right: 4, labels: ["‹ Sus2", "Normal", "Sus4 ›"] } },
 ];
 // `twist`: a second choice made by rotating the wrist while the menu is open (centred = `centre`).
 const ARPS = ["down", "up", "updown"];   // patterns that use the octave span
@@ -322,7 +323,8 @@ const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const chordFor = deg => buildChord(S.root, S.scale, deg - 1, eff("variation"), eff("sus"));
 
 // ── Synth (Web Audio) ─────────────────────────────────────────────────────
-let actx = null, master = null, analyser = null, pianoWave = null, pianoHiWave = null, noiseBuf = null;
+let actx = null, master = null, pianoWave = null, pianoHiWave = null, noiseBuf = null;
+const partBus = {};                   // "lower" / "upper" -> { bus, an } (analyser for the visualiser)
 const reverbSend = {};                // instrument -> gain node feeding the reverb
 const masterGain = () => { const v = eff("volume"); return v * v * 0.45; };
 function startAudio() {
@@ -336,9 +338,12 @@ function startAudio() {
   soft.oversample = "2x";
   master = actx.createGain(); master.gain.value = masterGain();
   master.connect(comp).connect(soft).connect(actx.destination);
-  analyser = actx.createAnalyser();     // for the visualiser only
-  analyser.fftSize = 4096; analyser.smoothingTimeConstant = 0.82; analyser.minDecibels = -85; analyser.maxDecibels = -18;
-  soft.connect(analyser);
+  for (const part of ["lower", "upper"]) {
+    const bus = actx.createGain(), an = actx.createAnalyser();
+    an.fftSize = 4096; an.smoothingTimeConstant = 0.82; an.minDecibels = -78; an.maxDecibels = -12;
+    bus.connect(master); bus.connect(an);
+    partBus[part] = { bus, an, bins: new Uint8Array(an.frequencyBinCount) };
+  }
 
   // Room: a generated impulse response (2.6 s of decaying, progressively darker noise).
   const sr = actx.sampleRate, len = Math.floor(sr * 2.6), ir = actx.createBuffer(2, len, sr);
@@ -377,7 +382,7 @@ const live = new Set();
 const sounding = [];                  // { m, t0, t1 } for the keyboard display
 // Strings ensemble voices: [detune in cents, pan, level, octave]. Levels add up to about two plain saws.
 const ENSEMBLE = [[-14, -0.7, 0.4, 0], [-5, 0.3, 0.45, 0], [4, -0.3, 0.45, 0], [13, 0.7, 0.4, 0], [-7, 0.5, 0.15, 1], [8, -0.5, 0.15, 1]];
-function note(inst, m, t, vel, dur, cutoff = 2400) {
+function note(inst, m, t, vel, dur, cutoff = 2400, part = "upper") {
   const f = mtof(m), g = actx.createGain(), lp = actx.createBiquadFilter();
   lp.type = "lowpass"; g.connect(lp);
   g.gain.setValueAtTime(0, t);
@@ -428,7 +433,7 @@ function note(inst, m, t, vel, dur, cutoff = 2400) {
     });
     srcs.push(vib);
   }
-  out.connect(master); out.connect(reverbSend[inst]);
+  out.connect(partBus[part].bus); out.connect(reverbSend[inst]);
   const n = { g, srcs };
   srcs.forEach(o => { o.start(t); if (end) o.stop(end); });
   srcs[0].onended = () => live.delete(n);
@@ -459,7 +464,7 @@ const upperNotes = (ch, inst) => ch.midi.map(m => m + (inst === "piano" ? 0 : 12
 function strikeLower(ch, t) {
   const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).lower;
   const loud = inst === "strings" ? 3.2 : 2;            // the low part needs extra level to carry
-  lowerNotes(ch).forEach((m, i) => note(inst, m, t, (i === 0 ? 0.2 : 0.14) * loud, null, 2500));
+  lowerNotes(ch).forEach((m, i) => note(inst, m, t, (i === 0 ? 0.2 : 0.14) * loud, null, 2500, "lower"));
 }
 function strikeUpper(ch, t, dur) {
   const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).upper;
@@ -539,6 +544,7 @@ function refresh(oldSig) {
 }
 /** Set a setting directly (mouse). */
 function setSetting(key, value) {
+  if (!actx) return;
   const old = sig();
   S[key] = value; if (menu && key in menu.hover) menu.hover[key] = value;
   save(); refresh(old);
@@ -620,7 +626,6 @@ const COUNT_LABELS = ["Thumb", "Thumb + Index", "Thumb + Index + Middle", "Thumb
 // Fist = stop; any other shape = no change.
 let countCandidate = null, countSince = 0;
 function rightTick(now) {
-  if (!readHand("right")) return;
   const down = H.right.down, n = orderedCount(down);
   const target = n === 0 ? comboDeg(FIST)
     : n > 0 ? S.countMap[n - 1]
@@ -698,7 +703,6 @@ function updateHover(pose, now) {
 
 let leftCandidate = null, leftSince = 0;
 function leftTick(now) {
-  if (!readHand("left")) return;
   const down = H.left.down;
   let n = orderedCount(down);
   if (n < 0 && down[0] && !down[1] && !down[2] && !down[3] && !down[4]) n = 4;   // four fingers, thumb tucked
@@ -725,7 +729,10 @@ function leftTick(now) {
 
 function tick() {
   const now = performance.now();
-  rightTick(now); leftTick(now);
+  const r = readHand("right"), l = readHand("left");     // the bend bars always follow the gloves
+  if (!actx) return;                                     // chords and settings only after Start
+  if (r) rightTick(now);
+  if (l) leftTick(now);
 }
 
 // ── Calibration (average ~0.5 s of samples) ──────────────────────────────
@@ -742,17 +749,10 @@ function calibrate(which) {
     done.forEach(h => { S.cal[h][which] = [0, 1, 2, 3, 4].map(i => samples[h].reduce((s, r) => s + r[i], 0) / samples[h].length); });
     save();
     if (which === "open") done.forEach(h => { if (simState[h]) simState[h].yaw = null; });   // "straight ahead" = now
-    renderCal(done.length ? "" : "No glove data, calibration skipped.");
   }, 600);
 }
 $("calOpen").onclick = () => calibrate("open");
 $("calFist").onclick = () => calibrate("fist");
-/** Both calibrations as ten angles each: right hand thumb to little finger, then left. */
-function renderCal(note = "") {
-  const list = which => "(" + HANDS.flatMap(h => S.cal[h][which].map(a => Math.round(a))).join(", ") + ")";
-  $("calInfo").innerHTML = `<b>Calibrated open hands</b><span title="Right thumb to little finger, then left">${list("open")}</span>`
-    + `<b>Calibrated fists</b><span title="Right thumb to little finger, then left">${list("fist")}</span>` + (note ? `<div>${note}</div>` : "");
-}
 
 // ── Rendering ────────────────────────────────────────────────────────────
 function fill(sel, items, value) {
@@ -811,7 +811,7 @@ function renderChords() {
     return `<div class="chord" data-deg="${d}"><div class="r">${ch.roman}</div><div class="n">${ch.name}</div><div class="who">${whoPlays(d)}</div></div>`;
   }).join("");
   document.querySelectorAll(".chord").forEach(el => {
-    el.onpointerdown = () => { startAudio(); setAudioBtn(); play(+el.dataset.deg, "ui"); };
+    el.onpointerdown = () => { if (actx) play(+el.dataset.deg, "ui"); };
     el.onpointerleave = () => stop("ui");
   });
   if (current) renderNow(chordFor(current.deg));
@@ -823,10 +823,10 @@ function buildControls() {
     const hands = handSVG(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), 40, `Left hand: ${COUNT_LABELS[i]} up`, true)
       + (i === 3 ? handSVG(upOnly([1, 2, 3, 4]), 40, "Left hand: four fingers up, thumb tucked", true) : "");
     const body = c.type === "range"
-      ? `<div class="meterwrap"><div class="meter" data-key="${c.key}"><i></i><b></b></div><div class="ends"><span>▲ ${c.ends[0]}</span><span>▼ ${c.ends[1]}</span></div></div>`
+      ? `<div class="meterwrap"><div class="meter" data-key="${c.key}"><i></i><b></b></div><div class="ends"><span>▲ ${c.ends[0]}</span><span class="cval"></span><span>▼ ${c.ends[1]}</span></div></div>`
       : `<div class="opts">${c.options.map(o => `<div class="opt" data-key="${c.key}" data-v="${o.id}">${o.label}</div>`).join("")}</div>`
         + (c.twist ? `<div class="sus">${[c.twist.left, c.twist.centre, c.twist.right].map((v, j) => `<div class="opt" data-key="${c.twist.key}" data-v="${v}">${c.twist.labels[j]}</div>`).join("")}</div>` : "");
-    return `<div class="ctl" id="ctl${i}"><div class="ctlhead"><div class="hands">${hands}</div><div><div class="cname">${i + 1} · ${c.label}</div><div class="cval"></div></div></div>${body}<div class="hint"></div></div>`;
+    return `<div class="ctl" id="ctl${i}"><div class="ctlhead"><div class="hands">${hands}</div><div class="cname">${i + 1}: ${c.label}</div></div>${body}<div class="hint"></div></div>`;
   }).join("");
   $("controls").querySelectorAll(".opt").forEach(el => el.onclick = () => {
     const key = el.dataset.key;
@@ -851,8 +851,6 @@ function renderControls() {
       el.querySelector(".meter > b").style.bottom = `calc(${pct(S[c.key])}% - 1px)`;
     } else {
       const tw = c.twist || {}, tv = tw.key && hov(tw.key);
-      const extra = !tw.key ? "" : tw.key === "sus" ? (tv && susAllowed(v, tv) ? ` sus${tv}` : "") : (ARPS.includes(v) ? ` · ${tv} oct` : "");
-      el.querySelector(".cval").textContent = c.options.find(o => o.id === v).label + extra;
       el.querySelectorAll(".opt").forEach(o => {
         const second = !!tw.key && o.dataset.key === tw.key, val = second ? +o.dataset.v : o.dataset.v;
         o.classList.toggle("sel", S[o.dataset.key] === val);
@@ -861,12 +859,12 @@ function renderControls() {
       });
     }
     el.querySelector(".hint").textContent = !active ? ""
-      : (c.twist ? "tilt ▲▼ · twist wrist ‹ › · fist = select" : "tilt ▲▼ · fist = select");
+      : (c.twist ? "Tilt ▲▼ · Twist wrist ‹ › · Fist = select" : "Tilt ▲▼ · Fist = select");
   });
 }
 
 $("fingers").innerHTML = HANDS.map(h => `<div class="handname">${h === "right" ? "Right hand" : "Left hand"}</div>` + FINGERS.map((f, i) => `
-  <div class="frow"><div class="fname"><span class="sw" style="background:${f.hex}"></span>${f.label}</div>
+  <div class="frow"><div>${f.label}</div>
   <div class="bar"><i id="b${h}${i}" style="background:${f.hex}"></i><div class="th" style="left:${ON * 100}%"></div></div>
   <div class="val" id="v${h}${i}">–</div></div>`).join("")).join("");
 
@@ -876,13 +874,16 @@ function onSettingsChange() {
 }
 ["root", "scale"].forEach(id => $(id).onchange = onSettingsChange);
 
-function setAudioBtn() { const on = actx && actx.state === "running"; $("audioBtn").textContent = on ? "Audio on" : "Start audio"; $("audioBtn").classList.toggle("on", !!on); }
-$("audioBtn").onclick = () => { startAudio(); setTimeout(setAudioBtn, 50); };
+$("audioBtn").onclick = () => {
+  startAudio();
+  $("audioBtn").textContent = "Started"; $("audioBtn").classList.add("on");
+  $("main").classList.remove("locked");
+};
 
 // Released anywhere (the cards are re-drawn when the variation changes, so don't rely on the card itself).
 window.addEventListener("pointerup", () => stop("ui"));
 // Keyboard audition: hold 1–8.
-window.addEventListener("keydown", e => { const d = +e.key; if (d >= 1 && d <= 8 && !e.repeat) { startAudio(); setAudioBtn(); play(d, "key" + d); } });
+window.addEventListener("keydown", e => { const d = +e.key; if (actx && d >= 1 && d <= 8 && !e.repeat) play(d, "key" + d); });
 window.addEventListener("keyup", e => { const d = +e.key; if (d >= 1 && d <= 8) stop("key" + d); });
 
 setInterval(tick, 10);
@@ -911,33 +912,40 @@ function fit(c) {
 }
 const ACCENT = css.getPropertyValue("--accent").trim();
 
-// Spectrum, 40 Hz – 9 kHz on a log axis, as one smooth line. Rises quickly, falls slowly.
-const VIZ_N = 48, vizLevel = new Float32Array(VIZ_N);
-let vizBins = null;
+// Spectrum, 40 Hz – 9 kHz on a log axis: one smooth line for the lower instrument and one for the upper.
+// Each rises quickly and falls slowly.
+const VIZ_N = 48;
+const VIZ = [{ part: "lower", label: "Lower", color: "#2c8f5d", level: new Float32Array(VIZ_N) },
+             { part: "upper", label: "Upper", color: ACCENT, level: new Float32Array(VIZ_N) }];
 function drawViz() {
   const { ctx, w, h } = fit($("viz"));
-  if (analyser && !vizBins) vizBins = new Uint8Array(analyser.frequencyBinCount);
-  if (analyser) analyser.getByteFrequencyData(vizBins);
-  const binHz = analyser ? actx.sampleRate / analyser.fftSize : 1;
-  for (let i = 0; i < VIZ_N; i++) {
-    let target = 0;
-    if (analyser) {
-      const b0 = 40 * Math.pow(225, i / VIZ_N) / binHz, b1 = 40 * Math.pow(225, (i + 1) / VIZ_N) / binHz;
-      if (b1 - b0 < 1) { const b = (b0 + b1) / 2, k = Math.floor(b); target = vizBins[k] + (vizBins[k + 1] - vizBins[k]) * (b - k); }
-      else { for (let k = Math.ceil(b0); k < b1; k++) target = Math.max(target, vizBins[k]); }
-      target /= 255;
+  const base = h - 3, x = i => i / (VIZ_N - 1) * w;
+  ctx.font = "10px system-ui"; ctx.textBaseline = "top"; ctx.lineJoin = "round";
+  VIZ.forEach((v, k) => {
+    const pb = partBus[v.part], lv = v.level;
+    if (pb) pb.an.getByteFrequencyData(pb.bins);
+    const binHz = pb ? actx.sampleRate / pb.an.fftSize : 1;
+    for (let i = 0; i < VIZ_N; i++) {
+      let target = 0;
+      if (pb) {
+        const b0 = 40 * Math.pow(225, i / VIZ_N) / binHz, b1 = 40 * Math.pow(225, (i + 1) / VIZ_N) / binHz;
+        if (b1 - b0 < 1) { const b = (b0 + b1) / 2, j = Math.floor(b); target = pb.bins[j] + (pb.bins[j + 1] - pb.bins[j]) * (b - j); }
+        else { for (let j = Math.ceil(b0); j < b1; j++) target = Math.max(target, pb.bins[j]); }
+        target /= 255;
+      }
+      lv[i] += (target - lv[i]) * (target > lv[i] ? 0.3 : 0.08);
     }
-    vizLevel[i] += (target - vizLevel[i]) * (target > vizLevel[i] ? 0.3 : 0.08);
-  }
-  const base = h - 3, x = i => i / (VIZ_N - 1) * w, y = i => base - vizLevel[i] * (h - 10);
-  ctx.beginPath(); ctx.moveTo(0, y(0));
-  for (let i = 0; i < VIZ_N - 1; i++) ctx.quadraticCurveTo(x(i), y(i), (x(i) + x(i + 1)) / 2, (y(i) + y(i + 1)) / 2);
-  ctx.lineTo(w, y(VIZ_N - 1));
-  ctx.strokeStyle = ACCENT; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
-  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, ACCENT + "55"); grad.addColorStop(1, ACCENT + "00");
-  ctx.fillStyle = grad; ctx.fill();
+    const y = i => base - lv[i] * (h - 8);
+    ctx.beginPath(); ctx.moveTo(0, y(0));
+    for (let i = 0; i < VIZ_N - 1; i++) ctx.quadraticCurveTo(x(i), y(i), (x(i) + x(i + 1)) / 2, (y(i) + y(i + 1)) / 2);
+    ctx.lineTo(w, y(VIZ_N - 1));
+    ctx.strokeStyle = v.color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, v.color + "40"); grad.addColorStop(1, v.color + "00");
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.fillStyle = v.color; ctx.textAlign = "right"; ctx.fillText(v.label, w - 36 * (1 - k), 0);
+  });
 }
 
 // Both hands from the fingertip sensor positions (hub frame, metres: -Y along the fingers, +Z out of the
@@ -954,36 +962,20 @@ function drawSim() {
     const s = handData(name);
     const tips = s && FINGERS.map(f => s[f.id] && s[f.id]["TRANSFORM@hub"] && s[f.id]["TRANSFORM@hub"].slice(0, 3));
     if (!tips || tips.some(t => !t)) return;
-    const S0 = simState[name] || (simState[name] = { yaw: null, kx: [], len: [] });
+    const S0 = simState[name] || (simState[name] = { yaw: null });
     const q = (s.hub && s.hub["ORIENTATION@LTP_NED"]) || [0, 0, 0, 1];
     if (S0.yaw == null) { const f = qrot(q, [0, -1, 0]); if (Math.hypot(f[0], f[1]) > 0.5) S0.yaw = Math.atan2(f[1], f[0]); }
     const a = -(S0.yaw || 0) / 2, Q = qmul([0, 0, Math.sin(a), Math.cos(a)], q);
     const P = p => { const v = qrot(Q, p); return [cx + v[1] * scale, cy - (v[0] * ct - v[2] * st) * scale]; };
-    const path = pts => { ctx.beginPath(); pts.forEach((p, i) => { const [X, Y] = P(p); i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); };
-
-    // Knuckles sit in the palm plane under each finger (tracked only while that finger is straight).
-    tips.forEach((t, i) => { if (S0.kx[i] == null) S0.kx[i] = t[0]; else if (!H[name].down[i]) S0.kx[i] += 0.02 * (t[0] - S0.kx[i]); });
-    const K = tips.map((_, i) => [S0.kx[i] * 0.62, -0.028, 0]);
-    K[0] = [S0.kx[1] * 0.95, 0.022, 0];                       // thumb starts at the side of the palm
-    path([K[1], K[2], K[3], K[4], [S0.kx[4] * 0.5, 0.05, 0], [S0.kx[1] * 0.55, 0.05, 0], K[0]]);
-    ctx.closePath(); ctx.fillStyle = "#232733"; ctx.fill(); ctx.strokeStyle = "#3d4452"; ctx.lineWidth = 2; ctx.stroke();
-
-    // Fingers: two equal bones from knuckle to tip; the middle joint bows out of the back of the hand.
-    const width = Math.max(4, scale * 0.013);
-    tips.forEach((t, i) => {
-      const d = [t[0] - K[i][0], t[1] - K[i][1], t[2] - K[i][2]], dist = Math.hypot(...d) || 1e-6;
-      const L = S0.len[i] = Math.max(S0.len[i] || 0, dist), bow = Math.sqrt(Math.max(0, L * L - dist * dist)) / 2;
-      const u = d.map(x => x / dist);
-      let n = [u[2] * u[0], u[2] * u[1], u[2] * u[2] - 1];     // -Z made perpendicular to the finger
-      const nl = Math.hypot(...n);
-      n = nl > 1e-3 ? n.map(x => x / nl) : [0, -1, 0];
-      const mid = [0, 1, 2].map(j => K[i][j] + d[j] / 2 + n[j] * bow);
-      path([K[i], mid, t]); ctx.strokeStyle = "#4a5263"; ctx.lineWidth = width; ctx.stroke();
+    // As in the live view: the hub, a line out to each fingertip sensor, and a dot on each sensor.
+    const hub = P([0, 0, 0]), pts = tips.map(P);
+    ctx.lineWidth = 2.5;
+    pts.forEach(([X, Y], i) => {
+      ctx.globalAlpha = 0.55; ctx.strokeStyle = FINGERS[i].hex;
+      ctx.beginPath(); ctx.moveTo(hub[0], hub[1]); ctx.lineTo(X, Y); ctx.stroke(); ctx.globalAlpha = 1;
     });
-    tips.forEach((t, i) => {
-      const [X, Y] = P(t);
-      ctx.beginPath(); ctx.arc(X, Y, width * 0.62, 0, 7); ctx.fillStyle = FINGERS[i].hex; ctx.fill();
-    });
+    ctx.fillStyle = "#e6e8ec"; ctx.beginPath(); ctx.arc(hub[0], hub[1], 3.5, 0, 7); ctx.fill();
+    pts.forEach(([X, Y], i) => { ctx.fillStyle = FINGERS[i].hex; ctx.beginPath(); ctx.arc(X, Y, 4.5, 0, 7); ctx.fill(); });
   });
 }
 
@@ -1016,7 +1008,7 @@ function drawPiano() {
 }
 (function frame() { requestAnimationFrame(frame); drawViz(); drawSim(); drawPiano(); })();
 
-buildControls(); buildPiano(); renderChords(); renderCal(); renderNow(null);
+buildControls(); buildPiano(); renderChords(); renderNow(null);
 </script>
 </body>
 </html>
