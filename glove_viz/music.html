@@ -111,7 +111,7 @@
       <label><input type="checkbox" id="invRoll"> invert wrist twist</label>
     </div>
     <div class="controls" id="controls"></div>
-    <div class="help">Left hand: hold a finger count to open that setting, tilt the hand up / down to move through it, then close the fist to select. Changing to another count cancels. You can also click any option.</div>
+    <div class="help">Left hand: hold a finger count to open that setting, tilt the hand up / down to move through it, then close the fist to select. Holding a different count instead switches to that setting without saving. Variation and sus go back to a plain triad on every new chord. You can also click any option.</div>
   </div>
 
   <h2>Right hand: chords</h2>
@@ -374,7 +374,14 @@ let current = null;   // { deg, source, ch, step, next }
 function play(deg, source) {
   if (current && current.deg === deg && current.source === source) return;
   silence();
+  resetVariation();
   startChord(deg, source);
+}
+/** Variation and sus belong to one chord: every newly played chord starts as a plain triad. */
+function resetVariation() {
+  if (S.variation === "triad" && S.sus === 0) return;
+  S.variation = "triad"; S.sus = 0;
+  save(); renderChords(); ctlDirty = true;
 }
 function startChord(deg, source) {
   const ch = chordFor(deg);
@@ -698,7 +705,7 @@ function renderChords() {
   }).join("");
   document.querySelectorAll(".chord").forEach(el => {
     el.onpointerdown = () => { startAudio(); setAudioBtn(); play(+el.dataset.deg, "ui"); };
-    el.onpointerup = el.onpointerleave = () => stop("ui");
+    el.onpointerleave = () => stop("ui");
   });
   if (current) renderNow(chordFor(current.deg));
 }
@@ -781,6 +788,8 @@ function onSettingsChange() {
 function setAudioBtn() { const on = actx && actx.state === "running"; $("audioBtn").textContent = on ? "Audio on" : "Start audio"; $("audioBtn").classList.toggle("on", !!on); }
 $("audioBtn").onclick = () => { startAudio(); setTimeout(setAudioBtn, 50); };
 
+// Released anywhere (the cards are re-drawn when the variation changes, so don't rely on the card itself).
+window.addEventListener("pointerup", () => stop("ui"));
 // Keyboard audition: hold 1–8.
 window.addEventListener("keydown", e => { const d = +e.key; if (d >= 1 && d <= 8 && !e.repeat) { startAudio(); setAudioBtn(); play(d, "key" + d); } });
 window.addEventListener("keyup", e => { const d = +e.key; if (d >= 1 && d <= 8) stop("key" + d); });
