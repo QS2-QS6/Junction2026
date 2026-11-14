@@ -58,18 +58,30 @@ def stream_key(desc) -> str:
     return key
 
 
+def detect_hand(definition: dict):
+    """'left' / 'right' from the definition's device_info, or None if it doesn't say."""
+    info = definition.get("device_info")
+    if not isinstance(info, dict):
+        return None
+    hand = info.get("hand")
+    if isinstance(hand, str) and hand.lower() in ("left", "right"):
+        return hand.lower()
+    is_right = info.get("is_right_glove")
+    if isinstance(is_right, bool):
+        return "right" if is_right else "left"
+    return None
+
+
 class GloveState:
-    """Latest frame per group, shared between the RGMP reader and HTTP clients."""
+    """Latest frame per group for every connected glove, shared between the RGMP reader and HTTP clients."""
 
     def __init__(self) -> None:
         self.cond = threading.Condition()
         self.seq = 0
         self.status = "starting"
-        self.device_id = None
-        self.groups: dict[str, dict] = {}
-        self._rate_count: dict[str, int] = {}
+        # device_id -> {"hand": "left"|"right", "groups": {name: {"t", "s"}}, "rates": {}, "count": {}}
+        self.devices: dict[int, dict] = {}
         self._rate_t0 = time.monotonic()
-        self.rates: dict[str, float] = {}
 
     def set_status(self, status: str) -> None:
         with self.cond:
@@ -79,26 +91,66 @@ class GloveState:
             self.seq += 1
             self.cond.notify_all()
 
-    def update_group(self, name: str, ts: int, streams: dict) -> None:
+    def _streaming_status(self) -> str:
+        if not self.devices:
+            return "device disconnected, waiting"
+        return "streaming " + ", ".join(
+            f"{d['hand']} glove {dev_id}" for dev_id, d in sorted(self.devices.items())
+        )
+
+    def add_device(self, device_id: int, hand) -> None:
         with self.cond:
-            self.groups[name] = {"t": ts, "s": streams}
-            self._rate_count[name] = self._rate_count.get(name, 0) + 1
+            if hand is None:
+                # Glove doesn't report its side: take the free slot, right first.
+                taken = {d["hand"] for i, d in self.devices.items() if i != device_id}
+                hand = "left" if "right" in taken and "left" not in taken else "right"
+            self.devices[device_id] = {"hand": hand, "groups": {}, "rates": {}, "count": {}}
+        self.set_status(self._streaming_status())
+
+    def remove_device(self, device_id) -> None:
+        with self.cond:
+            if device_id is None:
+                self.devices.clear()
+            else:
+                self.devices.pop(device_id, None)
+        self.set_status(self._streaming_status())
+
+    def clear_devices(self) -> None:
+        with self.cond:
+            self.devices.clear()
+
+    def update_group(self, device_id: int, name: str, ts: int, streams: dict) -> None:
+        with self.cond:
+            dev = self.devices.get(device_id)
+            if dev is None:
+                return
+            dev["groups"][name] = {"t": ts, "s": streams}
+            dev["count"][name] = dev["count"].get(name, 0) + 1
             now = time.monotonic()
             if now - self._rate_t0 >= 1.0:
                 dt = now - self._rate_t0
-                self.rates = {k: round(v / dt, 1) for k, v in self._rate_count.items()}
-                self._rate_count = {}
+                for d in self.devices.values():
+                    d["rates"] = {k: round(v / dt, 1) for k, v in d["count"].items()}
+                    d["count"] = {}
                 self._rate_t0 = now
             self.seq += 1
             self.cond.notify_all()
 
     def snapshot_json(self) -> str:
+        hands = {
+            d["hand"]: {"device_id": dev_id, "groups": d["groups"], "rates": d["rates"]}
+            for dev_id, d in sorted(self.devices.items())
+        }
+        # Top-level device_id/rates/groups describe one glove (the right one if present),
+        # for pages that only show a single hand.
+        primary = hands.get("right") or hands.get("left") or {}
         return json.dumps(
             {
                 "status": self.status,
-                "device_id": self.device_id,
-                "rates": self.rates,
-                "groups": self.groups,
+                "device_id": primary.get("device_id"),
+                "rates": primary.get("rates", {}),
+                "groups": primary.get("groups", {}),
+                "hands": hands,
             },
             separators=(",", ":"),
         )
@@ -109,9 +161,11 @@ def rgmp_reader(host: str, port: int, state: GloveState) -> None:
     while True:
         try:
             with socket.create_connection((host, port), timeout=5) as sock:
+                state.clear_devices()
                 state.set_status(f"connected to {host}:{port}, waiting for definition")
-                lookup: dict = {}
-                names: dict[int, str] = {}
+                # Per device: group_id -> stream descriptors, and group_id -> group name.
+                lookups: dict[int, dict] = {}
+                names: dict[int, dict[int, str]] = {}
                 while True:
                     prefix, length = struct.unpack(
                         OUTER_HEADER_FMT, recv_exact(sock, OUTER_HEADER_SIZE)
@@ -120,23 +174,21 @@ def rgmp_reader(host: str, port: int, state: GloveState) -> None:
 
                     if prefix == MSG_PREFIX_DEFINITION:
                         definition = json.loads(payload.decode("utf-8"))
-                        lookup = build_group_lookup(definition, None, None, None)
-                        names = {
+                        dev_id = definition.get("device_id")
+                        lookups[dev_id] = build_group_lookup(definition, None, None, None)
+                        names[dev_id] = {
                             i: g.get("name", f"group_{i}")
                             for i, g in enumerate(definition.get("groups", []))
                         }
-                        state.device_id = definition.get("device_id")
-                        state.set_status(
-                            f"streaming device {state.device_id} ({len(names)} groups)"
-                        )
+                        state.add_device(dev_id, detect_hand(definition))
 
-                    elif prefix == MSG_PREFIX_DATA and lookup:
+                    elif prefix == MSG_PREFIX_DATA:
                         if len(payload) < DATA_FRAME_HEADER_SIZE:
                             continue
-                        _dev, group_id, ts = struct.unpack_from(
+                        dev_id, group_id, ts = struct.unpack_from(
                             DATA_FRAME_HEADER_FMT, payload, 0
                         )
-                        descs = lookup.get(group_id)
+                        descs = lookups.get(dev_id, {}).get(group_id)
                         if not descs:
                             continue
                         body = memoryview(payload)[DATA_FRAME_HEADER_SIZE:]
@@ -145,11 +197,16 @@ def rgmp_reader(host: str, port: int, state: GloveState) -> None:
                             vals = struct.unpack_from(d.struct_fmt, body, d.offset)
                             vals = [round(v, 5) if isinstance(v, float) else v for v in vals]
                             streams.setdefault(d.target_frame, {})[stream_key(d)] = vals
-                        state.update_group(names.get(group_id, f"group_{group_id}"), ts, streams)
+                        group = names[dev_id].get(group_id, f"group_{group_id}")
+                        state.update_group(dev_id, group, ts, streams)
 
                     elif prefix == MSG_PREFIX_DISCONNECT:
-                        state.set_status("device disconnected, waiting")
+                        dev_id = struct.unpack_from("<I", payload, 0)[0] if len(payload) >= 4 else None
+                        lookups.pop(dev_id, None)
+                        names.pop(dev_id, None)
+                        state.remove_device(dev_id)
         except (OSError, ConnectionError) as exc:
+            state.clear_devices()
             state.set_status(f"waiting for RGMP stream on {host}:{port} ({exc})")
             time.sleep(1.0)
 
