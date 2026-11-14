@@ -106,8 +106,9 @@ The starter model classifies labeled poses from each group's sensor
 to avoid placing frames from the same take in both train and test sets. The
 per-label split requires at least two distinct recording sessions for each
 action. The saved model bundle defaults to `artifacts/gesture_model.pt`. This
-is a baseline gesture classifier, not yet a robot-control policy: robot
-retargeting, simulation, and physical robot evaluation remain follow-up work.
+is a baseline gesture classifier, not yet a robot-control policy. The `/music`
+page separately demonstrates software-only hand retargeting and virtual-key
+presses from live glove input; it does not drive or validate a physical robot.
 
 For Verda, run the training command in a Verda GPU instance after making the
 captures available to that instance (for example by importing/reading them

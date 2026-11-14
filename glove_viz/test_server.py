@@ -65,7 +65,15 @@ class GloveStateTests(unittest.TestCase):
             self.assertEqual(result["frames"], 1)
 
     def test_only_visualizer_page_and_stream_routes_are_registered(self) -> None:
-        self.assertEqual(server.PAGES, {"/": "index.html", "/index.html": "index.html"})
+        self.assertEqual(
+            server.PAGES,
+            {
+                "/": "index.html",
+                "/index.html": "index.html",
+                "/music": "music.html",
+                "/music.html": "music.html",
+            },
+        )
 
     def test_recording_endpoint_rejects_requests_without_active_device(self) -> None:
         state = server.GloveState(SessionRecorder(Path(tempfile.gettempdir()) / "unused"))
@@ -83,6 +91,22 @@ class GloveStateTests(unittest.TestCase):
                 urllib.request.urlopen(request)
             self.assertEqual(response.exception.code, 409)
             self.assertIn("Connect a Rokoko device", response.exception.read().decode())
+        finally:
+            http_server.shutdown()
+            http_server.server_close()
+            thread.join()
+
+    def test_music_simulator_route_serves_the_music_page(self) -> None:
+        state = server.GloveState(SessionRecorder(Path(tempfile.gettempdir()) / "unused"))
+        http_server = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(state, 60))
+        thread = threading.Thread(target=http_server.serve_forever)
+        thread.start()
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{http_server.server_port}/music") as response:
+                body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn("Virtual robot-hand teleoperation", body)
+            self.assertIn('id="robotStop"', body)
         finally:
             http_server.shutdown()
             http_server.server_close()

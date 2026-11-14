@@ -215,6 +215,8 @@ def rgmp_reader(host: str, port: int, state: GloveState) -> None:
 PAGES = {
     "/": "index.html",
     "/index.html": "index.html",
+    "/music": "music.html",
+    "/music.html": "music.html",
 }
 
 
