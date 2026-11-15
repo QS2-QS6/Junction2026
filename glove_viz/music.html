@@ -13,7 +13,7 @@
   :root { color-scheme: dark; }
   * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .app { display: grid; grid-template-columns: 330px minmax(0, 1fr); min-height: 100vh; }
+  .app { display: grid; grid-template-columns: 495px minmax(0, 1fr); min-height: 100vh; }
   .side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 20px 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
   .side .panel { padding: 12px; flex: none; }
   .side h2 { margin-bottom: 8px; }
@@ -24,7 +24,7 @@
   .wrap { padding: 20px 20px 20px 16px; min-width: 0; min-height: 100vh; display: flex; flex-direction: column; gap: 16px; justify-content: space-between; }
   .wrap > * { flex: none; transition: opacity .2s; }
   .wrap.locked > * { opacity: .45; }
-  @media (max-width: 900px) {
+  @media (max-width: 1050px) {
     .app { grid-template-columns: 1fr; }
     .side { position: static; height: auto; padding: 20px 20px 0; }
     .wrap { min-height: 0; }
@@ -88,8 +88,9 @@
   .ctl.active { border-color: var(--accent); background: #1f3a2c; }
   .ctlhead { display: flex; align-items: center; min-height: 30px; }
   .ctl .hands { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
-  .ctl .hands svg { width: 38cqw; height: auto; }      /* as large as the card allows next to its text */
-  .ctl .opts { padding-right: calc(38cqw + 4px); }     /* keep the option highlight clear of the hand */
+  @container (max-width: 175px) { .ctl .ends .cval { font-size: 14px; } }
+  .ctl .hands svg { width: min(38cqw, calc(100cqw - 100px)); height: auto; }      /* as large as the card allows next to its text */
+  .ctl .opts { padding-right: calc(min(38cqw, calc(100cqw - 100px)) + 4px); }     /* keep the option highlight clear of the hand */
   .cname { font-size: 15px; font-weight: 700; }
   .ends .cval { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .meterwrap { display: flex; gap: 8px; flex: 1; min-height: 150px; }
