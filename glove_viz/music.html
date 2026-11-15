@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Glove Chords</title>
+<title>Tactile Music</title>
 <style>
   :root {
     --bg: #0f1115; --panel: #171a21; --card: #1d212a; --line: #2a2f3a; --text: #e6e8ec; --muted: #8b93a3;
@@ -17,6 +17,9 @@
   .side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 20px 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
   .side .panel { padding: 12px; flex: none; }
   .side h2 { margin-bottom: 8px; }
+  .vizhead { display: flex; justify-content: space-between; align-items: baseline; }
+  .vizhead span { display: flex; gap: 10px; text-transform: none; letter-spacing: 0; font-size: 11px; }
+  .vizhead b { color: var(--accent); font-weight: 600; }
   .side .vizbox { flex: 1 1 0; min-height: 110px; display: flex; flex-direction: column; }   /* visualiser and input map share the spare height 1 : 2 */
   .side .mapbox { flex: 2 1 0; min-height: 220px; display: flex; flex-direction: column; }
   .canvasbox { position: relative; flex: 1; min-height: 0; }
@@ -125,11 +128,11 @@
 <div class="app">
   <aside class="side">
     <div class="panel top">
-      <div class="titlerow"><h1>Glove Chords</h1><button class="primary" id="audioBtn">Start</button></div>
+      <div class="titlerow"><h1>Tactile Music</h1><button class="primary" id="audioBtn">Start</button></div>
       <label class="inline"><span>Key</span><select id="root"></select></label>
       <label class="inline"><span>Scale</span><select id="scale"></select></label>
     </div>
-    <div class="panel vizbox"><h2>Visualiser</h2><div class="canvasbox"><canvas id="viz"></canvas></div></div>
+    <div class="panel vizbox"><h2 class="vizhead">Visualiser<span><b style="color:#2c8f5d">Lower</b><b>Upper</b></span></h2><div class="canvasbox"><canvas id="viz"></canvas></div></div>
     <div class="panel mapbox">
       <h2>Input map</h2>
       <div class="poses"><div id="poseleft"></div><div id="poseright"></div></div>
@@ -978,7 +981,6 @@ function drawViz() {
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, v.color + "40"); grad.addColorStop(1, v.color + "00");
     ctx.fillStyle = grad; ctx.fill();
-    ctx.fillStyle = v.color; ctx.textAlign = "right"; ctx.fillText(v.label, w - 36 * (1 - k), 0);
   });
 }
 
