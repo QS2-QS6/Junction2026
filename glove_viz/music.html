@@ -59,12 +59,14 @@
   @media (max-width: 620px) { .now { flex-direction: column; align-items: stretch; } }
 
   .chords { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex: 1; }
-  .wrap > #rhBox { flex: 1; display: flex; flex-direction: column; }
+  .wrap > #rhBox { flex: 1; display: flex; flex-direction: column; min-height: 250px; }
+  .chords, .chord { min-height: 0; }
   @media (max-width: 680px) { .chords { grid-template-columns: repeat(4, 1fr); } }
   .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 6px 8px; text-align: center; cursor: pointer; user-select: none; display: flex; flex-direction: column; transition: background .06s, border-color .06s; }
   .chord .r { font-size: 30px; line-height: 1.2; font-weight: 700; }
   .chord .n { font-size: 15px; color: var(--muted); }
-  .chord .who { margin-top: 6px; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .chord .who { margin-top: 6px; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+  .chord .who svg { flex: 1 1 0; min-height: 0; width: 100%; height: auto; max-height: 112px; }   /* as big as the card allows; two share the height */
   svg.hand { display: block; flex: none; }
   .chord.active { background: #1f3a2c; border-color: var(--accent); }
 
