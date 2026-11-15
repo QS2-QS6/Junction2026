@@ -1,8 +1,9 @@
 """
-Live finger-motion visualizer for the Rokoko glove.
+Live server for the Rokoko glove.
 
 Reads the RGMP v2 stream (same protocol as the SDK's rgmp_stream.py) and serves
-a browser page that renders the hand in 3D, updated live over Server-Sent Events.
+two browser pages, updated live over Server-Sent Events: Tactile Music at / and
+the 3D hand view with capture recording at /capture.
 
 Usage:
   python glove_viz/server.py                       # stream at 127.0.0.1:12276, page at http://127.0.0.1:8000
@@ -292,8 +293,8 @@ def rgmp_reader(host: str, port: int, state: GloveState) -> None:
 PAGES = {
     "/": "index.html",
     "/index.html": "index.html",
-    "/music": "music.html",
-    "/music.html": "music.html",
+    "/capture": "capture.html",
+    "/capture.html": "capture.html",
 }
 
 
@@ -425,7 +426,7 @@ def main() -> None:
     server = ThreadingHTTPServer((args.http_host, args.http_port), make_handler(state, args.max_fps))
     server.daemon_threads = True
     url = f"http://{args.http_host}:{args.http_port}/"
-    print(f"# visualizer at {url}  |  chords at {url}music  (Ctrl+C to stop)", file=sys.stderr, flush=True)
+    print(f"# Tactile Music at {url}  |  capture at {url}capture  (Ctrl+C to stop)", file=sys.stderr, flush=True)
     if not args.no_browser:
         threading.Timer(0.5, webbrowser.open, args=(url,)).start()
     try:

@@ -64,14 +64,14 @@ class GloveStateTests(unittest.TestCase):
             self.assertFalse(result["active"])
             self.assertEqual(result["frames"], 1)
 
-    def test_only_visualizer_page_and_stream_routes_are_registered(self) -> None:
+    def test_only_music_and_capture_pages_are_registered(self) -> None:
         self.assertEqual(
             server.PAGES,
             {
                 "/": "index.html",
                 "/index.html": "index.html",
-                "/music": "music.html",
-                "/music.html": "music.html",
+                "/capture": "capture.html",
+                "/capture.html": "capture.html",
             },
         )
 
@@ -96,17 +96,21 @@ class GloveStateTests(unittest.TestCase):
             http_server.server_close()
             thread.join()
 
-    def test_music_simulator_route_serves_the_music_page(self) -> None:
+    def test_root_serves_the_music_page_and_capture_the_recording_page(self) -> None:
         state = server.GloveState(SessionRecorder(Path(tempfile.gettempdir()) / "unused"))
         http_server = ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(state, 60))
         thread = threading.Thread(target=http_server.serve_forever)
         thread.start()
         try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{http_server.server_port}/music") as response:
+            with urllib.request.urlopen(f"http://127.0.0.1:{http_server.server_port}/") as response:
                 body = response.read().decode("utf-8")
             self.assertEqual(response.status, 200)
             self.assertIn("<title>Tactile Music</title>", body)
             self.assertIn('id="audioBtn"', body)
+            with urllib.request.urlopen(f"http://127.0.0.1:{http_server.server_port}/capture") as response:
+                body = response.read().decode("utf-8")
+            self.assertEqual(response.status, 200)
+            self.assertIn('id="recordStart"', body)
         finally:
             http_server.shutdown()
             http_server.server_close()

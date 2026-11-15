@@ -3,427 +3,1054 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Glove Live</title>
+<title>Tactile Music</title>
 <style>
   :root {
-    --bg: #0f1115; --panel: #171a21; --line: #2a2f3a; --text: #e6e8ec; --muted: #8b93a3;
-    --thumb: #ff7a59; --index: #f5c542; --middle: #4fd18b; --ring: #4aa8ff; --little: #b07cff; --arm: #9aa3b2;
+    --bg: #0f1115; --panel: #171a21; --card: #1d212a; --line: #2a2f3a; --text: #e6e8ec; --muted: #8b93a3;
+    --accent: #4fd18b; --warn: #e5a14d;
+    --thumb: #ff7a59; --index: #f5c542; --middle: #4fd18b; --ring: #4aa8ff; --little: #b07cff;
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
-    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .app { display: grid; grid-template-columns: 1fr 300px; height: 100vh; }
-  @media (max-width: 760px) { .app { grid-template-columns: 1fr; grid-template-rows: 60vh auto; height: auto; } }
-  .view { position: relative; min-height: 300px; }
-  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
-  canvas:active { cursor: grabbing; }
-  .hint { position: absolute; left: 12px; bottom: 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
-  .side { background: var(--panel); border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; }
-  h1 { font-size: 15px; margin: 0 0 4px; }
-  .status { color: var(--muted); font-size: 12px; margin-bottom: 14px; word-break: break-word; }
-  .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e5484d; margin-right: 6px; vertical-align: 1px; }
-  .status.live .dot { background: #4fd18b; }
-  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
-  .row { display: grid; grid-template-columns: 58px 1fr 44px; align-items: center; gap: 8px; margin: 7px 0; }
-  .name { display: flex; align-items: center; gap: 6px; }
-  .sw { width: 9px; height: 9px; border-radius: 2px; flex: none; }
-  .bar { height: 8px; background: #232733; border-radius: 4px; overflow: hidden; }
-  .bar > i { display: block; height: 100%; width: 0; border-radius: 4px; transition: width .08s linear; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
-  .controls label { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; }
-  select, input, button { background: #232733; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; }
-  button { cursor: pointer; margin-top: 6px; }
-  button:disabled { cursor: default; opacity: .5; }
-  .small { color: var(--muted); font-size: 11px; margin-top: 8px; }
-  .flagbad { color: #e5a14d; }
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .app { display: grid; grid-template-columns: 495px minmax(0, 1fr); min-height: 100vh; }
+  .side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 20px 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
+  .side .panel { padding: 12px; flex: none; }
+  .side h2 { margin-bottom: 8px; }
+  .vizhead { display: flex; justify-content: space-between; align-items: baseline; }
+  .vizhead span { display: flex; gap: 10px; text-transform: none; letter-spacing: 0; font-size: 11px; }
+  .vizhead b { color: var(--accent); font-weight: 600; }
+  .side .vizbox { flex: 1 1 0; min-height: 110px; display: flex; flex-direction: column; }   /* visualiser and input map share the spare height 1 : 2 */
+  .side .mapbox { flex: 2 1 0; min-height: 220px; display: flex; flex-direction: column; }
+  .canvasbox { position: relative; flex: 1; min-height: 0; }
+  .canvasbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .wrap { padding: 20px 20px 20px 16px; min-width: 0; min-height: 100vh; display: flex; flex-direction: column; gap: 16px; justify-content: space-between; }
+  .wrap > * { flex: none; transition: opacity .2s; }
+  .wrap.locked > * { opacity: .45; }
+  @media (max-width: 1050px) {
+    .app { grid-template-columns: 1fr; }
+    .side { position: static; height: auto; padding: 20px 20px 0; }
+    .wrap { min-height: 0; }
+  }
+  .top { display: flex; flex-direction: column; gap: 8px; }
+  .top .titlerow { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .top select { flex: 1; min-width: 0; }
+  .top label.inline span { width: 40px; }
+  h1 { font-size: 17px; margin: 0; white-space: nowrap; }
+  button.primary { padding: 6px 22px; }
+  label.inline { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  select, button { background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; font: inherit; }
+  button { cursor: pointer; }
+  button.primary { background: var(--accent); color: #08130d; border-color: var(--accent); font-weight: 600; }
+  button.primary.on { background: var(--card); color: var(--accent); }
+  .conn { color: var(--muted); font-size: 12px; padding-left: 4px; }
+  .conn .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e5484d; margin-right: 7px; }
+  .conn .live .dot { background: var(--accent); }
+
+  .now { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 22px; display: flex; align-items: center; gap: 24px; }
+  .now .label { flex: none; min-width: 150px; text-align: left; }
+  .now .roman { font-size: 52px; font-weight: 700; line-height: 1; letter-spacing: -.02em; white-space: nowrap; }
+  .now .name { font-size: 20px; margin-top: 8px; color: var(--muted); white-space: nowrap; }
+  .now.idle .roman { color: #3a404d; }
+  .now.idle .label { text-align: center; }
+  #piano { flex: 1; min-width: 0; position: relative; align-self: stretch; min-height: 90px; }
+  #piano svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #piano .wk { fill: var(--muted); }
+  #piano .bk { fill: #12141a; }
+  #piano .wk.on { fill: var(--accent); }
+  #piano .bk.on { fill: #2fa868; stroke: var(--accent); stroke-width: .8; }
+  @media (max-width: 620px) { .now { flex-direction: column; align-items: stretch; } }
+
+  .chords { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex: 1; }
+  .wrap > .now { flex: 1; min-height: 130px; }       /* the keyboard takes whatever height is left */
+  @media (max-width: 680px) { .chords { grid-template-columns: repeat(4, 1fr); } }
+  .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 6px 8px; text-align: center; cursor: pointer; user-select: none; display: flex; flex-direction: column; transition: background .06s, border-color .06s; }
+  .chord .r { font-size: 30px; line-height: 1.2; font-weight: 700; }
+  .chord .n { font-size: 15px; color: var(--muted); }
+  .chord .who { margin-top: 6px; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
+  .chord .who svg { flex: none; width: min(var(--hand, 60px), 100%); height: auto; }   /* same size as the left-hand cards' hands */
+  svg.hand { display: block; flex: none; }
+  .chord.active { background: #1f3a2c; border-color: var(--accent); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 780px) { .grid2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+  .frow { display: grid; grid-template-columns: 52px 1fr 38px; align-items: center; gap: 8px; margin: 2px 0; }
+  .bar { position: relative; height: 12px; background: #232733; border-radius: 6px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; }
+  .bar .th { position: absolute; top: 0; bottom: 0; width: 2px; background: #fff6; left: 50%; }
+  .val { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .val.down { color: var(--text); font-weight: 600; }
+  .btns { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .btns button { padding: 5px 8px; font-size: 13px; }
+  .help { color: var(--muted); font-size: 12px; margin-top: 12px; }
+  .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; flex: 1; }
+  @media (max-width: 1150px) { .controls { grid-template-columns: repeat(2, 1fr); } }
+  .ctl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; position: relative; container-type: inline-size; }
+  .ctl.active { border-color: var(--accent); background: #1f3a2c; }
+  .ctlhead { display: flex; align-items: center; min-height: 30px; }
+  .ctl .hands { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
+  @container (max-width: 175px) { .ctl .ends .cval { font-size: 14px; } }
+  .ctl .hands svg { width: min(38cqw, calc(100cqw - 100px)); height: auto; }      /* as large as the card allows next to its text */
+  .ctl .opts { padding-right: calc(min(38cqw, calc(100cqw - 100px)) + 4px); }     /* keep the option highlight clear of the hand */
+  .cname { font-size: 15px; font-weight: 700; }
+  .ends .cval { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .meterwrap { display: flex; gap: 8px; flex: 1; min-height: 150px; }
+  .meter { position: relative; width: 34px; background: #232733; border-radius: 6px; overflow: hidden; cursor: pointer; touch-action: none; }
+  .meter > i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--muted); }
+  .ctl.active .meter > i { background: var(--accent); }
+  .meter > b { position: absolute; left: 0; right: 0; height: 2px; background: #fff; display: none; }
+  .ctl.active .meter > b { display: block; }
+  .ends { flex: 1; display: flex; flex-direction: column; justify-content: space-between; color: var(--muted); font-size: 11px; }
+  .opts { display: flex; flex-direction: column; gap: 4px; flex: 1; }
+  .opt { border: 1px solid transparent; border-radius: 6px; padding: 4px 7px; font-size: 12px; color: var(--muted); cursor: pointer; user-select: none; }
+  .opt.sel { color: var(--text); background: #2a2f3a; font-weight: 600; }
+  .opt.hover { border-color: var(--accent); color: var(--text); }
+  .opt.na { opacity: .35; text-decoration: line-through; }
+  .sus { display: flex; flex-direction: row; gap: 4px; }
+  .sus .opt { flex: 1; text-align: center; padding: 4px 2px; }
+  .ctl .hint { font-size: 11px; color: var(--muted); min-height: 16px; }
+  .ctl.active .hint { color: var(--accent); }
+  .handname { font-size: 12px; color: var(--muted); margin: 10px 0 2px; }
+  .handname:first-child { margin-top: 0; }
+  #fingers { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
+  @media (max-width: 480px) { #fingers { grid-template-columns: 1fr; } }
+  .poses { flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 6px; }
+  .poses > div { transition: opacity .2s; }
+  .poses > div { flex: 1 1 0; min-width: 0; }
+  .side .simrow { flex: 1.25 1 0; margin-top: 6px; }
+  .poses svg.hand { width: 100%; height: 100%; }
+  kbd { background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; }
 </style>
 </head>
 <body>
 <div class="app">
-  <div class="view">
-    <canvas id="c"></canvas>
-    <div class="hint">Drag to rotate · scroll to zoom · double-click to reset</div>
-  </div>
   <aside class="side">
-    <h1>Glove Live</h1>
-    <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
-
-    <h2>Sensor orientation <span style="text-transform:none;letter-spacing:0">(angle from identity; not a bend estimate)</span></h2>
-    <div id="bends"></div>
-
-    <h2>EMF residual <span style="text-transform:none;letter-spacing:0">(relative_emf_residual; lower is better)</span></h2>
-    <div id="resid"></div>
-
-    <h2>Capture demonstration</h2>
-    <div class="controls">
-      <label class="recording-label">Action label
-        <input id="recordingLabel" type="text" maxlength="120" placeholder="e.g. open hand">
-      </label>
-      <button id="recordStart" type="button">Start recording</button>
-      <button id="recordStop" type="button" disabled>Stop recording</button>
-      <div class="small" id="recordingStatus" aria-live="polite">Not recording</div>
+    <div class="panel top">
+      <div class="titlerow"><h1>Tactile Music</h1><button class="primary" id="audioBtn">Start</button></div>
+      <label class="inline"><span>Key</span><select id="root"></select></label>
+      <label class="inline"><span>Scale</span><select id="scale"></select></label>
     </div>
-
-    <h2>View</h2>
-    <div class="controls">
-      <label>Group
-        <select id="group"><option value="">Waiting for stream…</option></select>
-      </label>
-      <label><input type="checkbox" id="world"> World frame (apply hub orientation)</label>
-      <label><input type="checkbox" id="trails" checked> Motion trails</label>
-      <label><input type="checkbox" id="axes" checked> Sensor axes</label>
-      <button id="reset">Reset view</button>
+    <div class="panel vizbox"><h2 class="vizhead">Visualiser<span><b style="color:#2c8f5d">Lower</b><b>Upper</b></span></h2><div class="canvasbox"><canvas id="viz"></canvas></div></div>
+    <div class="panel mapbox">
+      <h2>Input map</h2>
+      <div class="poses"><div id="poseleft"></div><div id="poseright"></div></div>
+      <div class="canvasbox simrow"><canvas id="sim"></canvas></div>
     </div>
-    <div class="small" id="rates"></div>
+    <div class="panel">
+      <h2>Detected input</h2>
+      <div id="fingers"></div>
+      <div class="btns">
+        <button id="calOpen">Calibrate open hands</button>
+        <button id="calFist">Calibrate fists</button>
+      </div>
+    </div>
+    <div class="conn">
+      <div id="connright"><span class="dot"></span>Right hand: <span>Disconnected</span></div>
+      <div id="connleft"><span class="dot"></span>Left hand: <span>Disconnected</span></div>
+    </div>
   </aside>
+
+  <main class="wrap locked" id="main">
+    <div class="now idle" id="now">
+      <div class="label">
+        <div class="roman" id="nowRoman">–</div>
+        <div class="name" id="nowName">&nbsp;</div>
+      </div>
+      <div id="piano"></div>
+    </div>
+
+    <div class="panel" id="rhBox">
+      <h2>Right hand</h2>
+      <div class="chords" id="chords"></div>
+    </div>
+
+    <div class="panel" id="lhBox">
+      <h2>Left hand</h2>
+      <div class="controls" id="controls"></div>
+    </div>
+  </main>
 </div>
 
+<!-- Music theory: pure functions, no DOM. -->
 <script>
 "use strict";
-// ── Model ────────────────────────────────────────────────────────────────
-const SENSOR_INFO = {
-  thumb_finger_sensor:  { label: "Thumb",  color: "--thumb" },
-  index_finger_sensor:  { label: "Index",  color: "--index" },
-  middle_finger_sensor: { label: "Middle", color: "--middle" },
-  ring_finger_sensor:   { label: "Ring",   color: "--ring" },
-  little_finger_sensor: { label: "Little", color: "--little" },
-  arm_sensor:           { label: "Arm",    color: "--arm" },
+const SHARPS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const FLATS  = ["C","Db","D","Eb","E","F","Gb","G","Ab","A","Bb","B"];
+const ROOTS  = ["C","Db","D","Eb","E","F","F#","G","Ab","A","Bb","B"];
+const SCALES = {
+  "Major (Ionian)":  [0,2,4,5,7,9,11],
+  "Natural minor":   [0,2,3,5,7,8,10],
+  "Harmonic minor":  [0,2,3,5,7,8,11],
+  "Dorian":          [0,2,3,5,7,9,10],
+  "Phrygian":        [0,1,3,5,7,8,10],
+  "Lydian":          [0,2,4,6,7,9,11],
+  "Mixolydian":      [0,2,4,5,7,9,10],
 };
-const SENSOR_ORDER = Object.keys(SENSOR_INFO);
-const SENSOR_COLORS = ["--thumb", "--index", "--middle", "--ring", "--little", "--arm"];
-const css = getComputedStyle(document.documentElement);
+const ROMAN = ["I","II","III","IV","V","VI","VII"];
 
-const TRAIL_LEN = 60;          // ~0.7 s at 83 Hz
-let sensors = [];
-let trails = {};
-let latest = null, lastMsgAt = 0, lastT = {};
+// Chord quality from semitone intervals above the root: [third, fifth, (seventh)].
+const QUALITIES = {
+  "4,7":    { suffix: "",     roman: r => r,                    word: "major" },
+  "3,7":    { suffix: "m",    roman: r => r.toLowerCase(),      word: "minor" },
+  "3,6":    { suffix: "dim",  roman: r => r.toLowerCase() + "°", word: "diminished" },
+  "4,8":    { suffix: "aug",  roman: r => r + "+",              word: "augmented" },
+  "4,7,11": { suffix: "maj7", roman: r => r + "maj7",           word: "major 7th" },
+  "4,7,10": { suffix: "7",    roman: r => r + "7",              word: "dominant 7th" },
+  "3,7,10": { suffix: "m7",   roman: r => r.toLowerCase() + "7", word: "minor 7th" },
+  "3,6,10": { suffix: "m7b5", roman: r => r.toLowerCase() + "ø7", word: "half-diminished 7th" },
+  "3,6,9":  { suffix: "dim7", roman: r => r.toLowerCase() + "°7", word: "diminished 7th" },
+  "3,7,11": { suffix: "mMaj7",roman: r => r.toLowerCase() + "maj7", word: "minor-major 7th" },
+  "4,8,11": { suffix: "+maj7",roman: r => r + "+maj7",          word: "augmented major 7th" },
+};
 
-// Quaternions are [x, y, z, w] (identity arrives as 0,0,0,1).
-function qmul(a, b) {
-  const [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
-  return [aw*bx + ax*bw + ay*bz - az*by, aw*by - ax*bz + ay*bw + az*bx,
-          aw*bz + ax*by - ay*bx + az*bw, aw*bw - ax*bx - ay*by - az*bz];
+function useFlats(rootName, scaleName) {
+  if (rootName.includes("b") || rootName === "F") return true;
+  const minorish = /minor|Dorian|Phrygian/.test(scaleName);
+  return minorish && ["C", "D", "G"].includes(rootName);
 }
+
+const VARIATIONS = [
+  { id: "9", label: "9th" }, { id: "7", label: "7th" }, { id: "triad", label: "Triad" },
+  { id: "6", label: "6th" }, { id: "add9", label: "Add 9" },
+];
+/** sus2 doubles the 9th, so it is not offered on the 9th variations. */
+const susAllowed = (variation, sus) => !(sus === 2 && (variation === "9" || variation === "add9"));
+
+/**
+ * Chord on scale degree `deg` (0-based). The third, fifth, 6th, 7th and 9th are diatonic (stacked from
+ * the scale); sus2 / sus4 replace the third with a major 2nd / perfect 4th above the root.
+ * `midi` is in close position with the tonic around C3; the synth moves it to each instrument's register.
+ */
+function buildChord(rootName, scaleName, deg, variation = "triad", sus = 0) {
+  const scale = SCALES[scaleName];
+  const names = useFlats(rootName, scaleName) ? FLATS : SHARPS;
+  const base = 48 + ROOTS.indexOf(rootName);
+  const tone = k => { const idx = deg + k; return base + scale[idx % 7] + 12 * Math.floor(idx / 7); };
+  const r = tone(0), T = tone(2) - r, F = tone(4) - r, X = tone(5) - r, Sv = tone(6) - r, N = tone(8) - r;
+  if (!susAllowed(variation, sus)) sus = 0;
+  const third = sus === 2 ? 2 : sus === 4 ? 5 : T;
+  const iv = [0, third, F];
+  if (variation === "6") iv.push(X);
+  if (variation === "7" || variation === "9") iv.push(Sv);
+  if (variation === "9" || variation === "add9") iv.push(N);
+  const midi = iv.map(i => r + i);
+
+  const other = { suffix: "?", roman: x => x + "?", word: "other" };
+  const tq = QUALITIES[`${T},${F}`] || other, sq = QUALITIES[`${T},${F},${Sv}`] || other;
+  const R = ROMAN[deg % 7], flat9 = N !== 14, flat6 = X !== 9;
+  let suffix, roman, word;
+  if (sus) {
+    const ext = { triad: "", "7": Sv === 11 ? "maj7" : "7", "9": (Sv === 11 ? "maj9" : "9") + (flat9 ? "(b9)" : ""),
+                  "6": flat6 ? "(b6)" : "6", add9: "" }[variation];
+    suffix = ext + "sus" + sus + (variation === "add9" ? (flat9 ? "add(b9)" : "add9") : "") + (F === 6 ? "(b5)" : F === 8 ? "(#5)" : "");
+    roman = R + suffix;
+    word = `suspended ${sus === 2 ? "2nd" : "4th"}` + (variation === "triad" ? "" : `, ${VARIATIONS.find(v => v.id === variation).label.toLowerCase()}`);
+  } else if (variation === "7") {
+    suffix = sq.suffix; roman = sq.roman(R); word = sq.word;
+  } else if (variation === "9") {
+    suffix = flat9 ? sq.suffix + "(b9)" : sq.suffix.replace("7", "9");
+    roman = flat9 ? sq.roman(R) + "(b9)" : sq.roman(R).replace("7", "9");
+    word = flat9 ? sq.word + ", flat 9th" : sq.word.replace("7th", "9th");
+  } else if (variation === "6") {
+    const x = flat6 ? "(b6)" : "6";
+    suffix = tq.suffix + x; roman = tq.roman(R) + x; word = tq.word + (flat6 ? " flat 6th" : " 6th");
+  } else if (variation === "add9") {
+    const x = flat9 ? "add(b9)" : "add9";
+    suffix = tq.suffix + x; roman = tq.roman(R) + x; word = tq.word + (flat9 ? " add flat 9" : " add 9");
+  } else {
+    suffix = tq.suffix; roman = tq.roman(R); word = tq.word;
+  }
+  const chordRoot = names[r % 12];
+  const up = deg >= 7;                           // degree 8 = degree 1 an octave up
+  return {
+    degree: deg + 1,
+    roman: roman + (up ? "↑" : ""),
+    name: chordRoot + suffix,
+    word: `${chordRoot} ${word}${up ? " (octave up)" : ""}`,
+    notes: midi.map(m => names[m % 12]),
+    midi, third, fifth: F,
+  };
+}
+</script>
+
+<!-- App -->
+<script>
+"use strict";
+const FINGERS = [
+  { id: "thumb_finger_sensor",  label: "Thumb",  color: "--thumb" },
+  { id: "index_finger_sensor",  label: "Index",  color: "--index" },
+  { id: "middle_finger_sensor", label: "Middle", color: "--middle" },
+  { id: "ring_finger_sensor",   label: "Ring",   color: "--ring" },
+  { id: "little_finger_sensor", label: "Little", color: "--little" },
+];
+const css = getComputedStyle(document.documentElement);
+FINGERS.forEach(f => f.hex = css.getPropertyValue(f.color).trim());
+const $ = id => document.getElementById(id);
+
+// ── Settings (persisted per browser) ──────────────────────────────────────
+const CAL0 = () => ({ open: [20, 20, 20, 20, 20], fist: [100, 100, 100, 100, 100] });
+const DEFAULTS = {
+  root: "C", scale: "Major (Ionian)",
+  countMap: [1, 2, 3, 4, 5],        // right hand: 1..5 extended fingers -> degree
+  comboMap: {},                     // combo id -> degree (overrides the combo's default; 0 = stop)
+  cal: { right: CAL0(), left: CAL0() },
+  volume: 0.7, tempo: 100, pattern: "sustain", instrument: "mix", variation: "triad", sus: 0, span: 2,
+  swap: false, invTilt: false, invRoll: false,
+};
+let S = DEFAULTS;
+try { S = { ...DEFAULTS, ...JSON.parse(localStorage.getItem("gloveChords") || "{}") }; } catch {}
+if (S.cal.open) S.cal = { right: S.cal, left: CAL0() };          // older single-glove calibration
+const save = () => { try { localStorage.setItem("gloveChords", JSON.stringify(S)); } catch {} };
+
+// ── Left-hand settings ────────────────────────────────────────────────────
+// Lists are written top to bottom, the way they appear on screen (tilt up = move towards the top).
+const PATTERNS = [
+  { id: "down", label: "Arpeggio down" }, { id: "up", label: "Arpeggio up" }, { id: "updown", label: "Arpeggio up-down" },
+  { id: "sustain", label: "Sustain" }, { id: "pulse", label: "Pulse" }, { id: "broken", label: "Broken chord" },
+];
+const INSTRUMENTS = [
+  { id: "strings", label: "Strings + Strings", lower: "strings", upper: "strings" },
+  { id: "mix",     label: "Strings low + Piano high", lower: "strings", upper: "piano" },
+  { id: "piano",   label: "Piano + Piano", lower: "piano", upper: "piano" },
+];
+// Index = finger count - 1. `perDeg`: change per degree of hand tilt.
+const CONTROLS = [
+  { key: "volume", label: "Volume", type: "range", min: 0, max: 1, perDeg: 1 / 60, fmt: v => Math.round(v * 100) + "%", ends: ["Louder", "Quieter"] },
+  { key: "tempo", label: "Tempo", type: "range", min: 40, max: 200, perDeg: 160 / 60, fmt: v => Math.round(v) + " bpm", ends: ["Faster", "Slower"] },
+  { key: "pattern", label: "Pattern", type: "list", options: PATTERNS,
+    twist: { key: "span", left: 1, centre: 2, right: 3, labels: ["‹ 1 oct", "2 oct", "3 oct ›"] } },
+  { key: "instrument", label: "Sound", type: "list", options: INSTRUMENTS },
+  { key: "variation", label: "Variation", type: "list", options: VARIATIONS,
+    twist: { key: "sus", left: 2, centre: 0, right: 4, labels: ["‹ Sus2", "Normal", "Sus4 ›"] } },
+];
+// `twist`: a second choice made by rotating the wrist while the menu is open (centred = `centre`).
+const ARPS = ["down", "up", "updown"];   // patterns that use the octave span
+const STEP_DEG = 14;                  // hand tilt per list step
+let menu = null;                      // open setting: { i, key, hover, pose0, hist, matching }
+let ctlDirty = true;
+/** What the open menu is pointing at for setting `k` (the saved value if it isn't open). */
+const hov = k => (menu && k in menu.hover) ? menu.hover[k] : S[k];
+/** Setting value in effect. Volume and tempo are heard while you move; everything else only changes on the fist. */
+const LIVE_PREVIEW = ["volume", "tempo"];
+const eff = k => LIVE_PREVIEW.includes(k) ? hov(k) : S[k];
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const chordFor = deg => buildChord(S.root, S.scale, deg - 1, eff("variation"), eff("sus"));
+
+// ── Synth (Web Audio) ─────────────────────────────────────────────────────
+let actx = null, master = null, pianoWave = null, pianoHiWave = null, noiseBuf = null;
+const partBus = {};                   // "lower" / "upper" -> { bus, an } (analyser for the visualiser)
+const reverbSend = {};                // instrument -> gain node feeding the reverb
+const masterGain = () => { const v = eff("volume"); return v * v * 0.45; };
+function startAudio() {
+  if (actx) { actx.resume(); return; }
+  actx = new AudioContext();
+  // Output: volume -> gentle compressor -> soft clipper, so loud chords round off instead of crackling.
+  const comp = actx.createDynamicsCompressor();
+  comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 6; comp.attack.value = 0.005; comp.release.value = 0.2;
+  const soft = actx.createWaveShaper();
+  soft.curve = Float32Array.from({ length: 1025 }, (_, i) => Math.tanh((i - 512) / 512 * 1.5) / Math.tanh(1.5) * 0.95);
+  soft.oversample = "2x";
+  master = actx.createGain(); master.gain.value = masterGain();
+  master.connect(comp).connect(soft).connect(actx.destination);
+  for (const part of ["lower", "upper"]) {
+    const bus = actx.createGain(), an = actx.createAnalyser();
+    an.fftSize = 4096; an.smoothingTimeConstant = 0.82; an.minDecibels = -78; an.maxDecibels = -12;
+    bus.connect(master); bus.connect(an);
+    partBus[part] = { bus, an, bins: new Uint8Array(an.frequencyBinCount) };
+  }
+
+  // Room: a generated impulse response (2.6 s of decaying, progressively darker noise).
+  const sr = actx.sampleRate, len = Math.floor(sr * 2.6), ir = actx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    let y = 0;
+    for (let i = Math.floor(sr * 0.012); i < len; i++) {
+      const x = (Math.random() * 2 - 1) * Math.exp(-4.2 * i / len);
+      y += (x - y) * (0.5 - 0.35 * i / len);
+      d[i] = y;
+    }
+  }
+  const reverb = actx.createConvolver(); reverb.buffer = ir; reverb.connect(master);
+  for (const [inst, amount] of [["piano", 0.5], ["strings", 0.3]]) {
+    reverbSend[inst] = actx.createGain(); reverbSend[inst].gain.value = amount; reverbSend[inst].connect(reverb);
+  }
+
+  // Piano string spectrum, and its upper partials on their own (they are tuned sharp and die first).
+  const amps = [0, 1, .62, .38, .27, .2, .13, .1, .075, .055, .04, .03, .022, .016, .012, .009, .007];
+  pianoWave = actx.createPeriodicWave(new Float32Array(amps.length), new Float32Array(amps));
+  pianoHiWave = actx.createPeriodicWave(new Float32Array(amps.length), new Float32Array(amps.map((a, n) => n >= 5 ? a * 3 : 0)));
+  noiseBuf = actx.createBuffer(1, Math.floor(sr * 0.08), sr);
+  const nd = noiseBuf.getChannelData(0);
+  for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
+  retrigger();                          // a chord already held when audio starts should sound
+}
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+/**
+ * One note. `dur` = seconds until release, or null to hold (strings) / ring out (piano).
+ * Strings: an ensemble of detuned saws through a low-pass.
+ * Piano: three slightly mistuned strings per key (their beating gives the tone its movement), sharp upper
+ * partials that fade first, a hammer thump, a fast initial drop followed by a long tail, and room reverb.
+ */
+const live = new Set();
+const sounding = [];                  // { m, t0, t1 } for the keyboard display
+// Strings ensemble voices: [detune in cents, pan, level, octave]. Levels add up to about two plain saws.
+const ENSEMBLE = [[-14, -0.7, 0.4, 0], [-5, 0.3, 0.45, 0], [4, -0.3, 0.45, 0], [13, 0.7, 0.4, 0], [-7, 0.5, 0.15, 1], [8, -0.5, 0.15, 1]];
+function note(inst, m, t, vel, dur, cutoff = 2400, part = "upper") {
+  const f = mtof(m), g = actx.createGain(), lp = actx.createBiquadFilter();
+  lp.type = "lowpass"; g.connect(lp);
+  g.gain.setValueAtTime(0, t);
+  const srcs = [];                       // everything that has to be started and stopped
+  let end = null, out = lp;
+  if (inst === "piano") {
+    const tail = Math.min(5, 1.7 * Math.pow(2, (60 - m) / 20));       // low notes ring longer
+    const peak = vel * 1.5;
+    lp.Q.value = 0.2;
+    lp.frequency.setValueAtTime(Math.min(12000, f * 10 + 1500), t);    // bright at the strike, mellow as it rings
+    lp.frequency.setTargetAtTime(f * 2.5 + 400, t, 0.25 + tail * 0.2);
+    g.gain.linearRampToValueAtTime(peak, t + 0.004);
+    g.gain.setTargetAtTime(peak * 0.45, t + 0.004, 0.09);
+    g.gain.setTargetAtTime(0, t + 0.3, tail);
+    end = t + Math.min(8, 0.3 + tail * 4.5);
+    for (const [det, level] of [[-3, 0.4], [0.5, 0.45], [3.5, 0.35]]) {
+      const o = actx.createOscillator(), og = actx.createGain();
+      o.setPeriodicWave(pianoWave); o.frequency.value = f; o.detune.value = det; og.gain.value = level;
+      o.connect(og).connect(g); srcs.push(o);
+    }
+    const hi = actx.createOscillator(), hg = actx.createGain();
+    hi.setPeriodicWave(pianoHiWave); hi.frequency.value = f; hi.detune.value = 9 + Math.max(0, m - 48) * 0.25;
+    hg.gain.setValueAtTime(0.5, t); hg.gain.setTargetAtTime(0, t, 0.18);
+    hi.connect(hg).connect(g); srcs.push(hi);
+    const thump = actx.createBufferSource(), bp = actx.createBiquadFilter(), tg = actx.createGain();
+    thump.buffer = noiseBuf; bp.type = "bandpass"; bp.frequency.value = Math.min(4500, f * 3 + 300); bp.Q.value = 0.8;
+    tg.gain.setValueAtTime(vel * 0.9, t); tg.gain.setTargetAtTime(0, t, 0.012);
+    thump.connect(bp).connect(tg).connect(lp); srcs.push(thump);
+    out = actx.createStereoPanner(); out.pan.value = clamp((m - 60) / 45, -0.6, 0.6);   // bass left, treble right
+    lp.connect(out);
+  } else {
+    lp.frequency.value = cutoff; lp.Q.value = 0.6;
+    const att = dur ? 0.03 : 0.09;                         // held notes swell in like a bowed section
+    g.gain.linearRampToValueAtTime(vel, t + att);
+    if (dur) { g.gain.setTargetAtTime(0, t + dur, 0.07); end = t + dur + 0.6; }
+    else g.gain.setTargetAtTime(vel * 0.8, t + att, 0.3);
+    // A section, not a soloist: several players slightly out of tune with each other, spread across
+    // the stereo field, a quieter octave above, and a slow shared vibrato.
+    const vib = actx.createOscillator(), vibAmt = actx.createGain();
+    vib.frequency.value = 4.6 + Math.random() * 1.2; vibAmt.gain.value = 5;      // ± cents
+    vib.connect(vibAmt);
+    ENSEMBLE.forEach(([det, pan, level, octave]) => {
+      const o = actx.createOscillator(), og = actx.createGain(), sp = actx.createStereoPanner();
+      o.type = "sawtooth"; o.frequency.value = f; o.detune.value = det + octave * 1200 + (Math.random() * 4 - 2);
+      og.gain.value = level; sp.pan.value = pan;
+      vibAmt.connect(o.detune); o.connect(og).connect(sp).connect(g);
+      srcs.push(o);
+    });
+    srcs.push(vib);
+  }
+  out.connect(partBus[part].bus); out.connect(reverbSend[inst]);
+  const n = { g, srcs };
+  srcs.forEach(o => { o.start(t); if (end) o.stop(end); });
+  srcs[0].onended = () => live.delete(n);
+  live.add(n);
+  sounding.push({ m, t0: t, t1: dur ? t + dur : Infinity });
+}
+function silence() {
+  sounding.length = 0;
+  if (!actx) return;
+  const t = actx.currentTime;
+  for (const n of live) {
+    n.g.gain.cancelScheduledValues(t);
+    n.g.gain.setValueAtTime(n.g.gain.value, t);
+    n.g.gain.setTargetAtTime(0, t, 0.07);
+    n.srcs.forEach(o => { try { o.stop(t + 0.6); } catch {} });
+  }
+  live.clear();
+}
+
+// Registers. Lower part (a pianist's left hand): root, fifth, root, third from C2 up.
+// Upper part (right hand): the full chord, played according to the pattern: strings from C4 up, piano from C3 up.
+function lowerNotes(ch) {
+  const r = 36 + ch.midi[0] % 12;
+  return [r, r + ch.fifth, r + 12, r + 12 + ch.third];
+}
+const upperNotes = (ch, inst) => ch.midi.map(m => m + (inst === "piano" ? 0 : 12));
+
+function strikeLower(ch, t) {
+  const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).lower;
+  const loud = inst === "strings" ? 3.2 : 2;            // the low part needs extra level to carry
+  lowerNotes(ch).forEach((m, i) => note(inst, m, t, (i === 0 ? 0.2 : 0.14) * loud, null, 2500, "lower"));
+}
+function strikeUpper(ch, t, dur) {
+  const inst = INSTRUMENTS.find(i => i.id === eff("instrument")).upper;
+  upperNotes(ch, inst).forEach(m => note(inst, m, t, 0.1, dur));
+}
+
+// ── Playback: one chord at a time; the pattern runs in eighth-note steps ──
+let current = null;   // { deg, source, ch, step, next }
+function play(deg, source) {
+  if (current && current.deg === deg && current.source === source) return;
+  silence();
+  resetVariation();
+  startChord(deg, source);
+}
+/** Variation and sus belong to one chord: every newly played chord starts as a plain triad. */
+function resetVariation() {
+  if (S.variation === "triad" && S.sus === 0) return;
+  S.variation = "triad"; S.sus = 0;
+  save(); renderChords(); ctlDirty = true;
+}
+function startChord(deg, source) {
+  const ch = chordFor(deg);
+  current = { deg, source, ch, step: 0, next: 0 };
+  if (actx) {
+    const t = actx.currentTime + 0.01;
+    current.next = t;
+    strikeLower(ch, t);
+    if (eff("pattern") === "sustain") strikeUpper(ch, t, null);
+  }
+  renderNow(ch);
+}
+function stop(source) {
+  if (!current || (source && current.source !== source)) return;
+  silence(); current = null; renderNow(null);
+}
+/** Restart the sounding chord after a setting changed. */
+function retrigger() {
+  if (!current) return;
+  silence(); startChord(current.deg, current.source);
+}
+function patternStep(c, t, stepDur) {
+  const pattern = eff("pattern"), inst = INSTRUMENTS.find(i => i.id === eff("instrument"));
+  let U = upperNotes(c.ch, inst.upper);
+  if (ARPS.includes(pattern)) {         // arpeggios run over 1-3 octaves
+    const one = U;
+    U = [];
+    for (let o = 0; o < eff("span"); o++) U.push(...one.map(m => m + 12 * o));
+    U = U.filter(m => m <= 100);
+  }
+  const n = U.length, k = c.step;
+  if (k > 0 && k % 8 === 0 && inst.lower === "piano") strikeLower(c.ch, t);   // re-strike the decaying bass every bar
+  if (pattern === "pulse") { if (k % 2 === 0) strikeUpper(c.ch, t, stepDur * 1.7); return; }
+  let seq;
+  if (pattern === "up") seq = U.map((_, i) => i);
+  else if (pattern === "down") seq = U.map((_, i) => n - 1 - i);
+  else if (pattern === "updown") seq = [...U.keys(), ...[...U.keys()].slice(1, -1).reverse()];
+  else { seq = []; for (let i = 0; i < n - 1; i++) seq.push(i, n - 1); }       // broken: low, top, middle, top
+  note(inst.upper, U[seq[k % seq.length]], t, 0.2, stepDur * 0.95);
+}
+setInterval(() => {
+  if (!current || !actx || actx.state !== "running" || eff("pattern") === "sustain") return;
+  const now = actx.currentTime;
+  if (current.next < now - 0.2) current.next = now + 0.01;
+  while (current.next < now + 0.1) {
+    const stepDur = 30 / eff("tempo");
+    patternStep(current, current.next, stepDur);
+    current.step++; current.next += stepDur;
+  }
+}, 25);
+
+/** Apply whatever changed in the settings since `oldSig` was taken. */
+const sig = () => [eff("pattern"), eff("instrument"), eff("variation"), eff("sus"), eff("span")].join();
+function refresh(oldSig) {
+  if (actx) master.gain.setTargetAtTime(masterGain(), actx.currentTime, 0.03);
+  if (sig() !== oldSig) { renderChords(); retrigger(); }
+  ctlDirty = true;
+}
+/** Set a setting directly (mouse). */
+function setSetting(key, value) {
+  if (!actx) return;
+  const old = sig();
+  S[key] = value; if (menu && key in menu.hover) menu.hover[key] = value;
+  save(); refresh(old);
+}
+
+// ── Glove input ──────────────────────────────────────────────────────────
+let latest = null, lastMsgAt = 0, poseShown = null;
+const es = new EventSource("/stream");
+es.onmessage = e => { latest = JSON.parse(e.data); lastMsgAt = performance.now(); };
+
+const HANDS = ["right", "left"];
+const H = { right: { bends: [0, 0, 0, 0, 0], down: [false, false, false, false, false] },
+            left:  { bends: [0, 0, 0, 0, 0], down: [false, false, false, false, false] } };
+/** Sensor data of the glove playing the role `name` ("right" = chords, "left" = settings). */
+function handData(name) {
+  const src = S.swap ? (name === "right" ? "left" : "right") : name;
+  const h = latest && latest.hands && latest.hands[src];
+  return h && h.groups.default ? h.groups.default.s : null;
+}
+const angleDeg = q => 2 * Math.acos(Math.min(1, Math.abs(q[3]))) * 180 / Math.PI;
+function rawAngles(name) {
+  const s = handData(name);
+  if (!s) return null;
+  return FINGERS.map(f => {
+    const T = s[f.id] && s[f.id]["TRANSFORM@hub"];
+    return T ? angleDeg(T.slice(3, 7)) : null;
+  });
+}
+const ON = 0.6, OFF = 0.4;            // hysteresis on normalized bend
+/** Update bends / curled flags for one hand. False if that glove has no data. */
+function readHand(name) {
+  const raw = rawAngles(name);
+  if (!raw) return false;
+  const h = H[name], cal = S.cal[name];
+  h.bends = raw.map((a, i) => {
+    if (a == null) return 0;
+    const span = cal.fist[i] - cal.open[i];
+    return Math.abs(span) < 5 ? 0 : (a - cal.open[i]) / span;
+  });
+  h.bends.forEach((b, i) => { h.down[i] = h.down[i] ? b > OFF : b > ON; });
+  return true;
+}
+
+// Right-hand combinations: the listed fingers are UP, the rest curled
+// (finger indices: 0 thumb, 1 index, 2 middle, 3 ring, 4 little).
+// 6–8 are the 1–3 shapes with the little finger raised too. The ring finger is anatomically linked
+// to the little finger, so in combos that use the little finger the ring finger is ignored.
+// `def` is the default degree; the user can remap each one (stored in S.comboMap by id; 0 = stop).
+const COUNT_COMBOS = [
+  { id: "cnt4b", def: 4, fingers: [1, 2, 3, 4] },  // index + middle + ring + little up -> second way to play 4
+  { id: "cnt8", def: 8, fingers: [0, 1, 2, 4] },   // thumb + index + middle + little up -> I, octave up
+  { id: "cnt7", def: 7, fingers: [0, 1, 4] },      // thumb + index + little up -> VII
+  { id: "cnt6", def: 6, fingers: [0, 4] },         // thumb + little up         -> VI
+];
+const FIST = { id: "fist", def: 0, fingers: [] };   // all curled -> stop by default
+const RING_FOLLOWS_LITTLE = true;
+const SETTLE_MS = 150;                // a gesture must hold this long before it counts
+/** `active[i]` = finger i is up. */
+function matchCombo(active, combos = COUNT_COMBOS) {
+  for (const c of combos) {
+    const ignoreRing = RING_FOLLOWS_LITTLE && c.fingers.includes(4) && !c.fingers.includes(3);
+    const ok = [0, 1, 2, 3, 4].every(i => (ignoreRing && i === 3) || active[i] === c.fingers.includes(i));
+    if (ok) return comboDeg(c);
+  }
+  return null;
+}
+/** The degree a combo is mapped to (0 = stop). */
+const comboDeg = c => S.comboMap[c.id] ?? c.def;
+
+/** 0 = fist, 1..5 = thumb..little extended in order with the rest curled, -1 = any other shape. */
+function orderedCount(curled) {
+  const up = curled.map(c => !c);
+  const n = up.filter(Boolean).length;
+  return up.every((u, i) => u === (i < n)) ? n : -1;
+}
+const COUNT_LABELS = ["Thumb", "Thumb + Index", "Thumb + Index + Middle", "Thumb + Index + Middle + Ring", "All five"];
+
+// Right hand: chords. Ordered count N = the first N fingers up and the rest curled; combos next.
+// Fist = stop; any other shape = no change.
+let countCandidate = null, countSince = 0;
+function rightTick(now) {
+  const down = H.right.down, n = orderedCount(down);
+  const target = n === 0 ? comboDeg(FIST)
+    : n > 0 ? S.countMap[n - 1]
+    : matchCombo(down.map(c => !c)) ?? -1;
+  if (target !== countCandidate) { countCandidate = target; countSince = now; }
+  else if (now - countSince > SETTLE_MS) {
+    if (target === 0) stop("glove"); else if (target > 0) play(target, "glove");
+  }
+}
+
+// ── Left hand: settings menu ─────────────────────────────────────────────
+// Hub orientation is a quaternion [x, y, z, w], hub -> world (NED: z points down).
+// Hub frame: -Y points along the fingers, +Y toward the wrist.
 function qrot(q, v) {
   const [x, y, z, w] = q;
   const tx = 2*(y*v[2] - z*v[1]), ty = 2*(z*v[0] - x*v[2]), tz = 2*(x*v[1] - y*v[0]);
   return [v[0] + w*tx + (y*tz - z*ty), v[1] + w*ty + (z*tx - x*tz), v[2] + w*tz + (x*ty - y*tx)];
 }
-const qangleDeg = q => 2 * Math.acos(Math.min(1, Math.abs(q[3]))) * 180 / Math.PI;
-
-// ── Stream ───────────────────────────────────────────────────────────────
-const es = new EventSource("/stream");
-const groupSelect = document.getElementById("group");
-es.onmessage = e => {
-  try {
-    latest = JSON.parse(e.data);
-    lastMsgAt = performance.now();
-    refreshStreamControls();
-  } catch (error) {
-    document.getElementById("statusText").textContent = `invalid visualizer data: ${error.message}`;
-  }
-};
-es.onerror = () => { document.getElementById("statusText").textContent = "lost connection to visualizer server, retrying…"; };
-
-function resetMotionHistory() {
-  trails = Object.fromEntries(sensors.map(s => [s.id, []]));
-  lastT = {};
+function qmul(a, b) {
+  const [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
+  return [aw*bx + ax*bw + ay*bz - az*by, aw*by - ax*bz + ay*bw + az*bx,
+          aw*bz + ax*by - ay*bx + az*bw, aw*bw - ax*bx - ay*by - az*bz];
+}
+let pitchEma = null;
+/** { pitch: how far the fingers point above horizontal (deg), q } or null without hub orientation. */
+function leftPose() {
+  const s = handData("left");
+  const q = s && s.hub && s.hub["ORIENTATION@LTP_NED"];
+  if (!q) return null;
+  const pitch = Math.asin(clamp(-qrot(q, [0, -1, 0])[2], -1, 1)) * 180 / Math.PI;
+  pitchEma = pitchEma == null ? pitch : pitchEma + 0.3 * (pitch - pitchEma);
+  return { pitch: pitchEma, q };
+}
+/** Wrist twist since q0 in degrees, positive = rotated to the left (anticlockwise seen from the wrist). */
+function twistDeg(q0, q) {
+  const rel = qmul([-q0[0], -q0[1], -q0[2], q0[3]], q);
+  let a = 2 * Math.atan2(rel[1], rel[3]) * 180 / Math.PI;
+  if (a > 180) a -= 360; else if (a < -180) a += 360;
+  return a;
 }
 
-function refreshStreamControls() {
-  const groups = latest && latest.groups ? latest.groups : {};
-  renderRecording(latest && latest.recording);
-  const groupNames = Object.keys(groups);
-  const currentNames = Array.from(groupSelect.options).map(option => option.value).filter(Boolean);
-  if (groupNames.join("\0") !== currentNames.join("\0")) {
-    const previous = groupSelect.value;
-    groupSelect.replaceChildren();
-    for (const name of groupNames) {
-      const option = document.createElement("option");
-      option.value = name;
-      option.textContent = name === "default" ? "default (fused)" : name;
-      groupSelect.append(option);
+function openMenu(i, pose) {
+  const old = sig(), c = CONTROLS[i];
+  const hover = { [c.key]: S[c.key] };
+  if (c.twist) hover[c.twist.key] = c.twist.centre;   // wrist as it is now = the middle choice
+  menu = { i, key: c.key, hover, pose0: pose, hist: [], matching: true };
+  refresh(old);
+}
+function closeMenu(commit) {
+  const old = sig();
+  if (commit) { Object.assign(S, menu.hover); save(); }
+  menu = null;
+  refresh(old);
+}
+function updateHover(pose, now) {
+  const c = CONTROLS[menu.i], h = menu.hover, old = sig();
+  if (pose && !menu.pose0) menu.pose0 = pose;
+  if (pose) {
+    const d = (pose.pitch - menu.pose0.pitch) * (S.invTilt ? -1 : 1);
+    if (c.type === "range") h[c.key] = clamp(S[c.key] + d * c.perDeg, c.min, c.max);
+    else {
+      const idx = id => c.options.findIndex(o => o.id === id);
+      const pos = idx(S[c.key]) - d / STEP_DEG, cur = idx(h[c.key]);
+      if (Math.abs(pos - cur) > 0.65) h[c.key] = c.options[clamp(Math.round(pos), 0, c.options.length - 1)].id;
     }
-    if (!groupNames.length) {
-      const option = document.createElement("option");
-      option.value = "";
-      option.textContent = "Waiting for stream…";
-      groupSelect.append(option);
-    } else {
-      groupSelect.value = groupNames.includes(previous)
-        ? previous
-        : groupNames.includes("default") ? "default" : groupNames[0];
+    if (c.twist) {
+      const tw = c.twist, r = twistDeg(menu.pose0.q, pose.q) * (S.invRoll ? -1 : 1), cur = h[tw.key];
+      h[tw.key] = r > (cur === tw.left ? 12 : 22) ? tw.left : r < -(cur === tw.right ? 12 : 22) ? tw.right : tw.centre;
     }
-    resetMotionHistory();
   }
+  menu.hist.push({ t: now, h: { ...h } });
+  while (menu.hist.length > 1 && menu.hist[1].t < now - 400) menu.hist.shift();
+  refresh(old);
+}
 
-  const discovered = new Set();
-  for (const group of Object.values(groups)) {
-    for (const [target, streams] of Object.entries(group.s || {})) {
-      if (target !== "hub" && streams["TRANSFORM@hub"]) discovered.add(target);
-    }
+let leftCandidate = null, leftSince = 0;
+function leftTick(now) {
+  const down = H.left.down;
+  let n = orderedCount(down);
+  if (n < 0 && down[0] && !down[1] && !down[2] && !down[3] && !down[4]) n = 4;   // four fingers, thumb tucked
+  if (n !== leftCandidate) { leftCandidate = n; leftSince = now; }
+  const held = now - leftSince;
+  const pose = leftPose();
+  // Opening needs a settled shape; switching away from an open menu needs longer, because closing
+  // the fist passes through lower counts on the way.
+  if (n > 0 && (!menu ? held >= SETTLE_MS : menu.i !== n - 1 && held >= 400)) {
+    if (menu) closeMenu(false);
+    openMenu(n - 1, pose);
+  } else if (n === 0 && menu && held >= 120) closeMenu(true);
+  if (!menu) return;
+  const matching = n === menu.i + 1;
+  if (matching) updateHover(pose, now);
+  else if (menu.matching) {
+    // The hand started changing shape: go back to where it pointed just before, so that
+    // the movement of closing the fist doesn't nudge the choice.
+    const past = menu.hist.filter(e => e.t <= now - 150).pop() || menu.hist[0];
+    if (past) { const old = sig(); menu.hover = { ...past.h }; refresh(old); }
   }
-  const ids = [
-    ...SENSOR_ORDER.filter(id => discovered.has(id)),
-    ...Array.from(discovered).filter(id => !SENSOR_INFO[id]).sort(),
+  menu.matching = matching;
+}
+
+function tick() {
+  const now = performance.now();
+  const r = readHand("right"), l = readHand("left");     // the bend bars always follow the gloves
+  if (!actx) return;                                     // chords and settings only after Start
+  if (r) rightTick(now);
+  if (l) leftTick(now);
+}
+
+// ── Calibration (average ~0.5 s of samples) ──────────────────────────────
+function calibrate(which) {
+  const samples = { right: [], left: [] };
+  const btn = $(which === "open" ? "calOpen" : "calFist");
+  btn.disabled = true;
+  const iv = setInterval(() => {
+    HANDS.forEach(h => { const r = rawAngles(h); if (r && r.every(a => a != null)) samples[h].push(r); });
+  }, 20);
+  setTimeout(() => {
+    clearInterval(iv); btn.disabled = false;
+    const done = HANDS.filter(h => samples[h].length >= 10);
+    done.forEach(h => { S.cal[h][which] = [0, 1, 2, 3, 4].map(i => samples[h].reduce((s, r) => s + r[i], 0) / samples[h].length); });
+    save();
+    if (which === "open") done.forEach(h => { if (simState[h]) simState[h].yaw = null; });   // "straight ahead" = now
+  }, 600);
+}
+$("calOpen").onclick = () => calibrate("open");
+$("calFist").onclick = () => calibrate("fist");
+
+// ── Rendering ────────────────────────────────────────────────────────────
+function fill(sel, items, value) {
+  sel.innerHTML = items.map(v => `<option${v === value ? " selected" : ""}>${v}</option>`).join("");
+}
+fill($("root"), ROOTS, S.root);
+fill($("scale"), Object.keys(SCALES), S.scale);
+
+function renderNow(ch) {
+  $("now").classList.toggle("idle", !ch);
+  $("nowRoman").textContent = ch ? ch.roman : "–";
+  $("nowName").textContent = ch ? ch.name : "\u00a0";
+  document.querySelectorAll(".chord").forEach(el => el.classList.toggle("active", !!ch && +el.dataset.deg === ch.degree));
+}
+
+// ── Hand pictogram: back of a right hand, thumb on the left (mirrored for the left hand). up[i] = finger i extended. ──
+const FINGER_GEOM = [                  // knuckle on the palm, tip when extended, width at knuckle / tip
+  { base: [34, 82], tip: [8, 54],  w: [13, 10], fold: [50, 76] },   // thumb (folds across the palm)
+  { base: [37, 57], tip: [32, 17], w: [11.5, 9] },                  // index
+  { base: [50, 55], tip: [50, 8],  w: [11.5, 9] },                  // middle
+  { base: [62.5, 57], tip: [66, 15], w: [11, 8.5] },                // ring
+  { base: [74, 62], tip: [82, 31], w: [9.5, 7.5] },                 // little
+];
+function handSVG(up, size = 44, title = "", mirror = false) {
+  // A finger: a tapered shape with round ends, creases at the joints and a nail (we see the back of the hand).
+  const finger = (a, b, w0, w1, color, op, detail) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy), nx = -dy / len, ny = dx / len;
+    const pt = (t, off) => `${(a[0] + dx * t + nx * off).toFixed(1)} ${(a[1] + dy * t + ny * off).toFixed(1)}`;
+    const r0 = w0 / 2, r1 = w1 / 2, wAt = t => (w0 + (w1 - w0) * t) / 2;
+    let out = `<path d="M${pt(0, r0)} L${pt(1, r1)} A${r1} ${r1} 0 0 0 ${pt(1, -r1)} L${pt(0, -r0)} A${r0} ${r0} 0 0 0 ${pt(0, r0)}Z" fill="${color}" fill-opacity="${op}"/>`;
+    if (detail) {
+      for (const t of [0.42, 0.72]) out += `<path d="M${pt(t, wAt(t) - 1)} L${pt(t, 1 - wAt(t))}" stroke="#000" stroke-opacity=".22" stroke-width="1.2" stroke-linecap="round"/>`;
+      out += `<path d="M${pt(0.9, r1 - 2)} L${pt(1.02, r1 - 2.4)} L${pt(1.02, 2.4 - r1)} L${pt(0.9, 2 - r1)}Z" fill="#fff" fill-opacity=".38" stroke="#fff" stroke-opacity=".38" stroke-width="1.6" stroke-linejoin="round"/>`;
+    }
+    return out;
+  };
+  let curled = "", extended = "";
+  FINGER_GEOM.forEach((g, i) => {
+    const color = FINGERS[i].hex;
+    if (up[i]) extended += finger(g.base, g.tip, g.w[0], g.w[1], color, 1, true);
+    else if (g.fold) curled += finger(g.base, g.fold, g.w[0], g.w[1], color, 0.7, false);            // thumb tucked over the palm
+    else curled += finger([g.base[0], g.base[1] - 5], [g.base[0], g.base[1] + 9], g.w[0], g.w[0] - 1, color, 0.7, false);   // folded: just the knuckle
+  });
+  // Palm: wide at the knuckles, a bulge under the thumb, narrowing into the wrist.
+  const palm = `<path d="M30 60 Q30 51 38 51 L66 50 Q79 52 80 63 L78 88 Q77 97 70 100 L70 108 L42 108 L42 101 Q30 97 29 84 Z" fill="#2a2f3a" stroke="#454c5b" stroke-width="2" stroke-linejoin="round"/>`;
+  return `<svg class="hand" width="${size}" height="${size * 1.1}" viewBox="0 0 100 110" role="img" aria-label="${title}">` +
+    (title ? `<title>${title}</title>` : "") +
+    `<g${mirror ? ' transform="translate(100,0) scale(-1,1)"' : ""}>` + extended + palm + curled + `</g></svg>`;
+}
+const upOnly = upIdx => [0, 1, 2, 3, 4].map(i => upIdx.includes(i));
+const names = idx => idx.map(i => FINGERS[i].label).join(" + ");
+
+/** Every right-hand gesture that plays `deg`, as [{up, title}]. */
+function gesturesFor(deg) {
+  return [
+    ...S.countMap.map((d, i) => d === deg ? { up: upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), title: `${COUNT_LABELS[i]} up` } : null).filter(Boolean),
+    ...[...COUNT_COMBOS, FIST].filter(c => comboDeg(c) === deg).map(c => ({ up: upOnly(c.fingers), title: c === FIST ? "Fist" : `${names(c.fingers)} up` })),
   ];
-  if (ids.join("\0") !== sensors.map(s => s.id).join("\0")) {
-    sensors = ids.map((id, index) => {
-      const info = SENSOR_INFO[id] || {};
-      return {
-        id,
-        label: info.label || id.replace(/_sensor$/, "").replace(/_/g, " "),
-        hex: css.getPropertyValue(info.color || SENSOR_COLORS[index % SENSOR_COLORS.length]).trim(),
-      };
-    });
-    buildRows(bendsEl);
-    buildRows(residEl);
-    resetMotionHistory();
-  }
+}
+function whoPlays(deg) {
+  return gesturesFor(deg).map(g => handSVG(g.up, 56, g.title)).join("");
 }
 
-groupSelect.addEventListener("change", resetMotionHistory);
-document.getElementById("world").addEventListener("change", resetMotionHistory);
-
-const recordingLabel = document.getElementById("recordingLabel");
-const recordStart = document.getElementById("recordStart");
-const recordStop = document.getElementById("recordStop");
-const recordingStatus = document.getElementById("recordingStatus");
-
-function renderRecording(recording) {
-  const active = !!(recording && recording.active);
-  recordStart.disabled = active || !latest || !latest.status.startsWith("streaming");
-  recordStop.disabled = !active;
-  recordingLabel.disabled = active;
-  if (active) {
-    recordingStatus.textContent = `Recording "${recording.label}" · ${recording.frames} RGMP frames`;
-  } else if (recording && recording.error) {
-    recordingStatus.textContent = recording.error;
-  } else if (recording && recording.file) {
-    recordingStatus.textContent = `Saved ${recording.file} · ${recording.frames} RGMP frames`;
-  } else {
-    recordingStatus.textContent = "Not recording";
-  }
-}
-
-async function recordingRequest(path, body) {
-  const response = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
+function renderChords() {
+  $("chords").innerHTML = [1, 2, 3, 4, 5, 6, 7, 8].map(d => {
+    const ch = chordFor(d);
+    return `<div class="chord" data-deg="${d}"><div class="r">${ch.roman}</div><div class="n">${ch.name}</div><div class="who">${whoPlays(d)}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".chord").forEach(el => {
+    el.onpointerdown = () => { if (actx) play(+el.dataset.deg, "ui"); };
+    el.onpointerleave = () => stop("ui");
   });
-  const result = await response.json();
-  if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
-  renderRecording(result.recording);
+  if (current) renderNow(chordFor(current.deg));
 }
 
-recordStart.addEventListener("click", async () => {
-  try {
-    await recordingRequest("/api/recording/start", { label: recordingLabel.value });
-  } catch (error) {
-    recordingStatus.textContent = error.message;
-  }
-});
-recordStop.addEventListener("click", async () => {
-  try {
-    await recordingRequest("/api/recording/stop");
-  } catch (error) {
-    recordingStatus.textContent = error.message;
-  }
-});
-
-// ── Camera ───────────────────────────────────────────────────────────────
-// Hub frame: +Y toward wrist, -Y toward fingers, +Z palm side. Screen "up" = -Z (back of hand).
-const DEFAULT_CAM = { yaw: 0.5, pitch: 0.6, dist: 0.38 };
-const cam = { ...DEFAULT_CAM };
-const canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
-let W = 0, H = 0, DPR = 1;
-function resize() {
-  DPR = window.devicePixelRatio || 1;
-  const r = canvas.getBoundingClientRect();
-  W = r.width; H = r.height;
-  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-}
-new ResizeObserver(resize).observe(canvas);
-
-let drag = null;
-canvas.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener("pointermove", e => {
-  if (!drag) return;
-  cam.yaw += (e.clientX - drag.x) * 0.008;
-  cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + (e.clientY - drag.y) * 0.008));
-  drag = { x: e.clientX, y: e.clientY };
-});
-canvas.addEventListener("pointerup", () => drag = null);
-canvas.addEventListener("wheel", e => { e.preventDefault(); cam.dist = Math.max(0.12, Math.min(1.5, cam.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
-const resetView = () => Object.assign(cam, DEFAULT_CAM);
-canvas.addEventListener("dblclick", resetView);
-document.getElementById("reset").onclick = resetView;
-const CENTER = [0, -0.01, 0.02];
-
-function project(p) {
-  // hub coords -> view coords (X right, Y up, Z toward camera at start)
-  let X = p[0] - CENTER[0], Y = -(p[2] - CENTER[2]), Z = p[1] - CENTER[1];
-  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
-  [X, Z] = [X*cy + Z*sy, -X*sy + Z*cy];
-  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
-  [Y, Z] = [Y*cp - Z*sp, Y*sp + Z*cp];
-  const depth = Math.max(0.02, cam.dist - Z);
-  const f = Math.min(W, H) * 1.5 / depth;
-  return { x: W/2 + X*f, y: H/2 - Y*f, s: f, depth };
-}
-
-// ── Drawing ──────────────────────────────────────────────────────────────
-function line(a, b, color, width, alpha = 1) {
-  const A = project(a), B = project(b);
-  ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width;
-  ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); ctx.globalAlpha = 1;
-}
-
-function drawGrid(hubQ) {
-  // Reference plane through the hub (back of the hand), 2 cm grid.
-  const map = p => hubQ ? qrot(hubQ, p) : p;
-  for (let i = -6; i <= 6; i++) {
-    const v = i * 0.02;
-    line(map([v, -0.12, 0]), map([v, 0.12, 0]), "#2a2f3a", 1);
-    line(map([-0.12, v, 0]), map([0.12, v, 0]), "#2a2f3a", 1);
-  }
-}
-
-function drawAxes(p, q, len) {
-  const cols = ["#e5484d", "#4fd18b", "#4aa8ff"];
-  [[1,0,0],[0,1,0],[0,0,1]].forEach((axis, i) => {
-    const d = qrot(q, axis);
-    line(p, [p[0] + d[0]*len, p[1] + d[1]*len, p[2] + d[2]*len], cols[i], 1.5, 0.85);
+// ── Left-hand settings panel ─────────────────────────────────────────────
+function buildControls() {
+  $("controls").innerHTML = CONTROLS.map((c, i) => {
+    const hands = handSVG(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), 60, `Left hand: ${COUNT_LABELS[i]} up`, true)
+      + (i === 3 ? handSVG(upOnly([1, 2, 3, 4]), 60, "Left hand: four fingers up, thumb tucked", true) : "");
+    const body = c.type === "range"
+      ? `<div class="meterwrap"><div class="meter" data-key="${c.key}"><i></i><b></b></div><div class="ends"><span>▲ ${c.ends[0]}</span><span class="cval"></span><span>▼ ${c.ends[1]}</span></div></div>`
+      : `<div class="opts">${c.options.map(o => `<div class="opt" data-key="${c.key}" data-v="${o.id}">${o.label}</div>`).join("")}</div>`
+        + (c.twist ? `<div class="sus">${[c.twist.left, c.twist.centre, c.twist.right].map((v, j) => `<div class="opt" data-key="${c.twist.key}" data-v="${v}">${c.twist.labels[j]}</div>`).join("")}</div>` : "");
+    return `<div class="ctl" id="ctl${i}"><div class="ctlhead"><div class="cname">${i + 1}: ${c.label}</div></div>${body}<div class="hint"></div><div class="hands">${hands}</div></div>`;
+  }).join("");
+  $("controls").querySelectorAll(".opt").forEach(el => el.onclick = () => {
+    const key = el.dataset.key;
+    setSetting(key, key === "sus" || key === "span" ? +el.dataset.v : el.dataset.v);
+  });
+  $("controls").querySelectorAll(".meter").forEach(el => {
+    const c = CONTROLS.find(c => c.key === el.dataset.key);
+    const set = e => { const r = el.getBoundingClientRect(); setSetting(c.key, c.max - clamp((e.clientY - r.top) / r.height, 0, 1) * (c.max - c.min)); };
+    el.onpointerdown = e => { el.setPointerCapture(e.pointerId); set(e); };
+    el.onpointermove = e => { if (e.buttons) set(e); };
   });
 }
-
-function frame() {
-  requestAnimationFrame(frame);
-  if (!W) return;
-  ctx.clearRect(0, 0, W, H);
-
-  const groupName = groupSelect.value;
-  const world = document.getElementById("world").checked;
-  const showTrails = document.getElementById("trails").checked;
-  const showAxes = document.getElementById("axes").checked;
-  const g = latest && latest.groups[groupName];
-  const hubOri = latest && Object.values(latest.groups).map(group =>
-    group.s && group.s.hub && group.s.hub["ORIENTATION@LTP_NED"]
-  ).find(Boolean);
-  const hubQ = world && hubOri ? hubOri : null;
-
-  drawGrid(hubQ);
-
-  if (!g || g.t === null) {
-    ctx.fillStyle = "#8b93a3"; ctx.font = "14px system-ui"; ctx.textAlign = "center";
-    ctx.fillText("Waiting for glove data…", W/2, H/2);
-    return;
-  }
-
-  const fresh = lastT[groupName] !== g.t;
-  lastT[groupName] = g.t;
-
-  // Collect sensor poses in display frame.
-  const poses = [];
-  for (const s of sensors) {
-    const T = g.s[s.id] && g.s[s.id]["TRANSFORM@hub"];
-    if (!T) continue;
-    let p = T.slice(0, 3), q = T.slice(3, 7);
-    if (hubQ) { p = qrot(hubQ, p); q = qmul(hubQ, q); }
-    poses.push({ s, p, q });
-    if (fresh) { const tr = trails[s.id]; tr.push(p); if (tr.length > TRAIL_LEN) tr.shift(); }
-  }
-
-  const origin = [0, 0, 0];
-  // Hub
-  const H0 = project(origin);
-  ctx.fillStyle = "#e6e8ec"; ctx.beginPath(); ctx.arc(H0.x, H0.y, Math.max(3, H0.s * 0.006), 0, 7); ctx.fill();
-  if (showAxes && hubQ) drawAxes(origin, hubQ, 0.03);
-
-  // Far-to-near so nearer sensors draw on top.
-  poses.sort((a, b) => project(b.p).depth - project(a.p).depth);
-  for (const { s, p, q } of poses) {
-    if (showTrails) {
-      const tr = trails[s.id];
-      for (let i = 1; i < tr.length; i++) line(tr[i-1], tr[i], s.hex, 2, (i / tr.length) * 0.6);
+function renderControls() {
+  ctlDirty = false;
+  CONTROLS.forEach((c, i) => {
+    const el = $("ctl" + i), active = !!menu && menu.i === i, v = hov(c.key);
+    el.classList.toggle("active", active);
+    if (c.type === "range") {
+      const pct = x => (x - c.min) / (c.max - c.min) * 100;
+      el.querySelector(".cval").textContent = c.fmt(v);
+      el.querySelector(".meter > i").style.height = pct(v) + "%";
+      el.querySelector(".meter > b").style.bottom = `calc(${pct(S[c.key])}% - 1px)`;
+    } else {
+      const tw = c.twist || {}, tv = tw.key && hov(tw.key);
+      el.querySelectorAll(".opt").forEach(o => {
+        const second = !!tw.key && o.dataset.key === tw.key, val = second ? +o.dataset.v : o.dataset.v;
+        o.classList.toggle("sel", S[o.dataset.key] === val);
+        o.classList.toggle("hover", active && hov(o.dataset.key) === val);
+        if (second) o.classList.toggle("na", tw.key === "sus" ? !susAllowed(v, val) : !ARPS.includes(v));
+      });
     }
-    line(origin, p, s.hex, 2.5, 0.55);
-    if (showAxes) drawAxes(p, q, 0.015);
-    const P = project(p);
-    ctx.fillStyle = s.hex; ctx.beginPath(); ctx.arc(P.x, P.y, Math.max(4, P.s * 0.007), 0, 7); ctx.fill();
-    ctx.fillStyle = "#e6e8ec"; ctx.font = "12px system-ui"; ctx.textAlign = "left";
-    ctx.fillText(s.label, P.x + 9, P.y - 7);
-  }
-}
-requestAnimationFrame(frame);
-
-// ── Side panel (10 Hz) ───────────────────────────────────────────────────
-function buildRows(el) {
-  const fragment = document.createDocumentFragment();
-  for (const s of sensors) {
-    const row = document.createElement("div");
-    row.className = "row";
-    row.dataset.id = s.id;
-
-    const name = document.createElement("div");
-    name.className = "name";
-    const swatch = document.createElement("span");
-    swatch.className = "sw";
-    swatch.style.background = s.hex;
-    const label = document.createElement("span");
-    label.textContent = s.label;
-    name.append(swatch, label);
-
-    const bar = document.createElement("div");
-    bar.className = "bar";
-    const fill = document.createElement("i");
-    fill.style.background = s.hex;
-    bar.append(fill);
-
-    const value = document.createElement("div");
-    value.className = "num";
-    value.textContent = "–";
-    row.append(name, bar, value);
-    fragment.append(row);
-  }
-  el.replaceChildren(fragment);
-}
-const bendsEl = document.getElementById("bends"), residEl = document.getElementById("resid");
-buildRows(bendsEl);
-buildRows(residEl);
-
-function setRow(el, id, frac, text, warn) {
-  const row = Array.from(el.children).find(child => child.dataset.id === id);
-  if (!row) return;
-  row.querySelector("i").style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
-  const n = row.querySelector(".num"); n.textContent = text; n.classList.toggle("flagbad", !!warn);
+    el.querySelector(".hint").textContent = !active ? ""
+      : (c.twist ? "Tilt ▲▼ · Twist wrist ‹ › · Fist = select" : "Tilt ▲▼ · Fist = select");
+  });
 }
 
+$("fingers").innerHTML = ["left", "right"].map(h => `<div><div class="handname">${h === "right" ? "Right hand" : "Left hand"}</div>` + FINGERS.map((f, i) => `
+  <div class="frow"><div>${f.label}</div>
+  <div class="bar"><i id="b${h}${i}" style="background:${f.hex}"></i><div class="th" style="left:${ON * 100}%"></div></div>
+  <div class="val" id="v${h}${i}">–</div></div>`).join("") + "</div>").join("");
+
+function onSettingsChange() {
+  S.root = $("root").value; S.scale = $("scale").value;
+  save(); stop(); renderChords();
+}
+["root", "scale"].forEach(id => $(id).onchange = onSettingsChange);
+
+$("audioBtn").onclick = () => {
+  startAudio();
+  $("audioBtn").textContent = "Started"; $("audioBtn").classList.add("on");
+  $("main").classList.remove("locked");
+};
+
+// Released anywhere (the cards are re-drawn when the variation changes, so don't rely on the card itself).
+window.addEventListener("pointerup", () => stop("ui"));
+// Keyboard audition: hold 1–8.
+window.addEventListener("keydown", e => { const d = +e.key; if (actx && d >= 1 && d <= 8 && !e.repeat) play(d, "key" + d); });
+window.addEventListener("keyup", e => { const d = +e.key; if (d >= 1 && d <= 8) stop("key" + d); });
+
+setInterval(tick, 10);
 setInterval(() => {
-  const st = document.getElementById("status");
-  const live = latest && performance.now() - lastMsgAt < 1500 && latest.status.startsWith("streaming");
-  st.classList.toggle("live", !!live);
-  if (latest) document.getElementById("statusText").textContent = latest.status;
-  if (!latest) return;
-
-  const g = latest.groups[groupSelect.value];
-  for (const s of sensors) {
-    const T = g && g.s[s.id] && g.s[s.id]["TRANSFORM@hub"];
-    if (T) { const a = qangleDeg(T.slice(3, 7)); setRow(bendsEl, s.id, a / 120, `${a.toFixed(0)}°`); }
-    else setRow(bendsEl, s.id, 0, "–");
-
-    const residualGroup = Object.values(latest.groups).find(group =>
-      group.s && group.s[s.id] && group.s[s.id]["CUSTOM@hub:relative_emf_residual"]
-    );
-    const r = residualGroup && residualGroup.s[s.id]["CUSTOM@hub:relative_emf_residual"];
-    if (r) setRow(residEl, s.id, r[0] / 10, r[0].toFixed(1), r[0] > 5);
-    else setRow(residEl, s.id, 0, "–");
+  HANDS.forEach(h => H[h].bends.forEach((b, i) => {
+    $("b" + h + i).style.width = `${clamp(b, 0, 1) * 100}%`;
+    const v = $("v" + h + i); v.textContent = `${Math.round(b * 100)}%`; v.classList.toggle("down", H[h].down[i]);
+  }));
+  // Hand pose: the pictograms follow each finger as it crosses the curl threshold.
+  const pose = ["left", "right"].map(h => handData(h) ? H[h].down.map(d => +d).join("") : "none").join();
+  if (pose !== poseShown) {
+    poseShown = pose;
+    ["left", "right"].forEach(h => {
+      const on = !!handData(h), el = $("pose" + h);
+      el.innerHTML = handSVG(H[h].down.map(d => !on || !d), 78, `${h === "left" ? "Left" : "Right"} hand`, h === "left");
+      el.style.opacity = on ? 1 : 0.3;
+    });
   }
-  const rates = Object.entries(latest.rates || {}).map(([k, v]) => `${k} ${v} Hz`).join(" · ");
-  document.getElementById("rates").textContent = (latest.device_id ? `device ${latest.device_id} · ` : "") + rates;
-}, 100);
+  if (ctlDirty) renderControls();
+  const streaming = latest && performance.now() - lastMsgAt < 1500 && latest.status.startsWith("streaming");
+  HANDS.forEach(h => {
+    const ok = !!streaming && !!handData(h), el = $("conn" + h);
+    el.classList.toggle("live", ok); el.lastElementChild.textContent = ok ? "Connected" : "Disconnected";
+  });
+}, 60);
+
+// ── Canvases: audio visualiser, simulated hands; keyboard ────────────────
+/** Size a canvas to its box, clear it, and return a context in CSS pixels. */
+function fit(c) {
+  const dpr = window.devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight;
+  const W = Math.round(w * dpr), Hh = Math.round(h * dpr);
+  if (c.width !== W || c.height !== Hh) { c.width = W; c.height = Hh; }
+  const ctx = c.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  return { ctx, w, h };
+}
+const ACCENT = css.getPropertyValue("--accent").trim();
+
+// Spectrum, 40 Hz – 9 kHz on a log axis: one smooth line for the lower instrument and one for the upper.
+// Each rises quickly and falls slowly.
+const VIZ_N = 48;
+const VIZ = [{ part: "lower", label: "Lower", color: "#2c8f5d", level: new Float32Array(VIZ_N) },
+             { part: "upper", label: "Upper", color: ACCENT, level: new Float32Array(VIZ_N) }];
+function drawViz() {
+  const { ctx, w, h } = fit($("viz"));
+  const base = h - 3, x = i => i / (VIZ_N - 1) * w;
+  ctx.font = "10px system-ui"; ctx.textBaseline = "top"; ctx.lineJoin = "round";
+  VIZ.forEach((v, k) => {
+    const pb = partBus[v.part], lv = v.level;
+    if (pb) pb.an.getByteFrequencyData(pb.bins);
+    const binHz = pb ? actx.sampleRate / pb.an.fftSize : 1;
+    for (let i = 0; i < VIZ_N; i++) {
+      let target = 0;
+      if (pb) {
+        const b0 = 40 * Math.pow(225, i / VIZ_N) / binHz, b1 = 40 * Math.pow(225, (i + 1) / VIZ_N) / binHz;
+        if (b1 - b0 < 1) { const b = (b0 + b1) / 2, j = Math.floor(b); target = pb.bins[j] + (pb.bins[j + 1] - pb.bins[j]) * (b - j); }
+        else { for (let j = Math.ceil(b0); j < b1; j++) target = Math.max(target, pb.bins[j]); }
+        target /= 255;
+      }
+      lv[i] += (target - lv[i]) * (target > lv[i] ? 0.3 : 0.08);
+    }
+    const y = i => base - lv[i] * (h - 8);
+    ctx.beginPath(); ctx.moveTo(0, y(0));
+    for (let i = 0; i < VIZ_N - 1; i++) ctx.quadraticCurveTo(x(i), y(i), (x(i) + x(i + 1)) / 2, (y(i) + y(i + 1)) / 2);
+    ctx.lineTo(w, y(VIZ_N - 1));
+    ctx.strokeStyle = v.color; ctx.lineWidth = 2; ctx.stroke();
+    ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, v.color + "40"); grad.addColorStop(1, v.color + "00");
+    ctx.fillStyle = grad; ctx.fill();
+  });
+}
+
+// Both hands from the fingertip sensor positions (hub frame, metres: -Y along the fingers, +Z out of the
+// palm), turned by the hub orientation and seen from behind and above. The heading each glove had when
+// it was first seen (or at "Calibrate: open hands") counts as straight ahead.
+const simState = {};
+function drawSim() {
+  const { ctx, w, h } = fit($("sim"));
+  const scale = Math.min(w / 2 / 0.15, (h - 18) / 0.16), ct = Math.cos(0.7), st = Math.sin(0.7);
+  ctx.lineCap = ctx.lineJoin = "round"; ctx.font = "11px system-ui"; ctx.textAlign = "center";
+  ["left", "right"].forEach((name, k) => {
+    const cx = w * (0.26 + 0.48 * k), cy = (h - 18) * 0.74;
+    ctx.fillStyle = "#8b93a3"; ctx.fillText(name === "left" ? "Left" : "Right", cx, h - 4);
+    const s = handData(name);
+    const tips = s && FINGERS.map(f => s[f.id] && s[f.id]["TRANSFORM@hub"] && s[f.id]["TRANSFORM@hub"].slice(0, 3));
+    if (!tips || tips.some(t => !t)) return;
+    const S0 = simState[name] || (simState[name] = { yaw: null });
+    const q = (s.hub && s.hub["ORIENTATION@LTP_NED"]) || [0, 0, 0, 1];
+    if (S0.yaw == null) { const f = qrot(q, [0, -1, 0]); if (Math.hypot(f[0], f[1]) > 0.5) S0.yaw = Math.atan2(f[1], f[0]); }
+    const a = -(S0.yaw || 0) / 2, Q = qmul([0, 0, Math.sin(a), Math.cos(a)], q);
+    const P = p => { const v = qrot(Q, p); return [cx + v[1] * scale, cy - (v[0] * ct - v[2] * st) * scale]; };
+    // As in the live view: the hub, a line out to each fingertip sensor, and a dot on each sensor.
+    const hub = P([0, 0, 0]), pts = tips.map(P);
+    ctx.lineWidth = 2.5;
+    pts.forEach(([X, Y], i) => {
+      ctx.globalAlpha = 0.55; ctx.strokeStyle = FINGERS[i].hex;
+      ctx.beginPath(); ctx.moveTo(hub[0], hub[1]); ctx.lineTo(X, Y); ctx.stroke(); ctx.globalAlpha = 1;
+    });
+    ctx.fillStyle = "#e6e8ec"; ctx.beginPath(); ctx.arc(hub[0], hub[1], 3.5, 0, 7); ctx.fill();
+    pts.forEach(([X, Y], i) => { ctx.fillStyle = FINGERS[i].hex; ctx.beginPath(); ctx.arc(X, Y, 4.5, 0, 7); ctx.fill(); });
+  });
+}
+
+// Keyboard, C2 – E7: the keys sounding right now are lit.
+const PIANO_LO = 36, PIANO_HI = 100;
+function buildPiano() {
+  let x = 0, white = "", black = "";
+  for (let m = PIANO_LO; m <= PIANO_HI; m++) {
+    if ([1, 3, 6, 8, 10].includes(m % 12)) black += `<rect id="key${m}" class="bk" x="${x - 3}" y="0" width="6" height="36" rx="1"/>`;
+    else { white += `<rect id="key${m}" class="wk" x="${x + 0.5}" y="0" width="9" height="58" rx="1.5"/>`; x += 10; }
+  }
+  $("piano").innerHTML = `<svg viewBox="0 0 ${x} 58" preserveAspectRatio="none" role="img" aria-label="Keys being played">${white}${black}</svg>`;
+}
+let keysOn = new Set();
+function drawPiano() {
+  const on = new Set();
+  if (current && actx && actx.state === "running") {
+    const now = actx.currentTime;
+    for (let i = sounding.length - 1; i >= 0; i--) {
+      const n = sounding[i];
+      if (n.t1 <= now) sounding.splice(i, 1); else if (n.t0 <= now) on.add(n.m);
+    }
+  } else if (current) {                 // audio not started: show the chord itself
+    const inst = INSTRUMENTS.find(i => i.id === eff("instrument"));
+    [...lowerNotes(current.ch), ...upperNotes(current.ch, inst.upper)].forEach(m => on.add(m));
+  }
+  for (const m of keysOn) if (!on.has(m)) { const el = $("key" + m); if (el) el.classList.remove("on"); }
+  for (const m of on) if (!keysOn.has(m)) { const el = $("key" + m); if (el) el.classList.add("on"); }
+  keysOn = on;
+}
+(function frame() { requestAnimationFrame(frame); drawViz(); drawSim(); drawPiano(); })();
+
+buildControls(); buildPiano();
+// Right-hand pictograms are drawn at the size the left-hand cards' hands come out at.
+new ResizeObserver(() => {
+  const w = document.querySelector("#controls .hands svg").getBoundingClientRect().width;
+  if (w) document.documentElement.style.setProperty("--hand", w + "px");
+}).observe($("controls"));
+ renderChords(); renderNow(null);
 </script>
 </body>
 </html>

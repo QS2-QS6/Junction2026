@@ -39,7 +39,7 @@ The visualizer uses the SDK's `examples/python/rgmp_stream.py` protocol helper.
    py .\glove_viz\server.py
    ```
 
-   Open <http://127.0.0.1:8000>. When the device is streaming, enter a short
+   Open <http://127.0.0.1:8000/capture>. When the device is streaming, enter a short
    action label (for example `open hand`) and select **Start recording**.
    Perform that action, then select **Stop recording**. Capture each action
    multiple times as separate labeled sessions; the training script requires
@@ -106,8 +106,8 @@ The starter model classifies labeled poses from each group's sensor
 to avoid placing frames from the same take in both train and test sets. The
 per-label split requires at least two distinct recording sessions for each
 action. The saved model bundle defaults to `artifacts/gesture_model.pt`. This
-is a baseline gesture classifier, not yet a robot-control policy. The `/music`
-page (<http://127.0.0.1:8000/music>) is separate: Tactile Music, an instrument
+is a baseline gesture classifier, not yet a robot-control policy. The main
+page (<http://127.0.0.1:8000>) is separate: Tactile Music, an instrument
 played from the live glove input of one or two gloves.
 
 For Verda, run the training command in a Verda GPU instance after making the

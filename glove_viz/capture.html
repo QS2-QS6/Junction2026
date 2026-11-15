@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Glove Live</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #171a21; --line: #2a2f3a; --text: #e6e8ec; --muted: #8b93a3;
+    --thumb: #ff7a59; --index: #f5c542; --middle: #4fd18b; --ring: #4aa8ff; --little: #b07cff; --arm: #9aa3b2;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .app { display: grid; grid-template-columns: 1fr 300px; height: 100vh; }
+  @media (max-width: 760px) { .app { grid-template-columns: 1fr; grid-template-rows: 60vh auto; height: auto; } }
+  .view { position: relative; min-height: 300px; }
+  canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+  canvas:active { cursor: grabbing; }
+  .hint { position: absolute; left: 12px; bottom: 10px; color: var(--muted); font-size: 12px; pointer-events: none; }
+  .side { background: var(--panel); border-left: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+  h1 { font-size: 15px; margin: 0 0 4px; }
+  .status { color: var(--muted); font-size: 12px; margin-bottom: 14px; word-break: break-word; }
+  .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #e5484d; margin-right: 6px; vertical-align: 1px; }
+  .status.live .dot { background: #4fd18b; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 18px 0 8px; font-weight: 600; }
+  .row { display: grid; grid-template-columns: 58px 1fr 44px; align-items: center; gap: 8px; margin: 7px 0; }
+  .name { display: flex; align-items: center; gap: 6px; }
+  .sw { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .bar { height: 8px; background: #232733; border-radius: 4px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0; border-radius: 4px; transition: width .08s linear; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .controls label { display: flex; align-items: center; gap: 8px; margin: 6px 0; cursor: pointer; }
+  select, input, button { background: #232733; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; font: inherit; }
+  button { cursor: pointer; margin-top: 6px; }
+  button:disabled { cursor: default; opacity: .5; }
+  .small { color: var(--muted); font-size: 11px; margin-top: 8px; }
+  .flagbad { color: #e5a14d; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="view">
+    <canvas id="c"></canvas>
+    <div class="hint">Drag to rotate · scroll to zoom · double-click to reset</div>
+  </div>
+  <aside class="side">
+    <h1>Glove Live</h1>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
+
+    <h2>Sensor orientation <span style="text-transform:none;letter-spacing:0">(angle from identity; not a bend estimate)</span></h2>
+    <div id="bends"></div>
+
+    <h2>EMF residual <span style="text-transform:none;letter-spacing:0">(relative_emf_residual; lower is better)</span></h2>
+    <div id="resid"></div>
+
+    <h2>Capture demonstration</h2>
+    <div class="controls">
+      <label class="recording-label">Action label
+        <input id="recordingLabel" type="text" maxlength="120" placeholder="e.g. open hand">
+      </label>
+      <button id="recordStart" type="button">Start recording</button>
+      <button id="recordStop" type="button" disabled>Stop recording</button>
+      <div class="small" id="recordingStatus" aria-live="polite">Not recording</div>
+    </div>
+
+    <h2>View</h2>
+    <div class="controls">
+      <label>Group
+        <select id="group"><option value="">Waiting for stream…</option></select>
+      </label>
+      <label><input type="checkbox" id="world"> World frame (apply hub orientation)</label>
+      <label><input type="checkbox" id="trails" checked> Motion trails</label>
+      <label><input type="checkbox" id="axes" checked> Sensor axes</label>
+      <button id="reset">Reset view</button>
+    </div>
+    <div class="small" id="rates"></div>
+  </aside>
+</div>
+
+<script>
+"use strict";
+// ── Model ────────────────────────────────────────────────────────────────
+const SENSOR_INFO = {
+  thumb_finger_sensor:  { label: "Thumb",  color: "--thumb" },
+  index_finger_sensor:  { label: "Index",  color: "--index" },
+  middle_finger_sensor: { label: "Middle", color: "--middle" },
+  ring_finger_sensor:   { label: "Ring",   color: "--ring" },
+  little_finger_sensor: { label: "Little", color: "--little" },
+  arm_sensor:           { label: "Arm",    color: "--arm" },
+};
+const SENSOR_ORDER = Object.keys(SENSOR_INFO);
+const SENSOR_COLORS = ["--thumb", "--index", "--middle", "--ring", "--little", "--arm"];
+const css = getComputedStyle(document.documentElement);
+
+const TRAIL_LEN = 60;          // ~0.7 s at 83 Hz
+let sensors = [];
+let trails = {};
+let latest = null, lastMsgAt = 0, lastT = {};
+
+// Quaternions are [x, y, z, w] (identity arrives as 0,0,0,1).
+function qmul(a, b) {
+  const [ax, ay, az, aw] = a, [bx, by, bz, bw] = b;
+  return [aw*bx + ax*bw + ay*bz - az*by, aw*by - ax*bz + ay*bw + az*bx,
+          aw*bz + ax*by - ay*bx + az*bw, aw*bw - ax*bx - ay*by - az*bz];
+}
+function qrot(q, v) {
+  const [x, y, z, w] = q;
+  const tx = 2*(y*v[2] - z*v[1]), ty = 2*(z*v[0] - x*v[2]), tz = 2*(x*v[1] - y*v[0]);
+  return [v[0] + w*tx + (y*tz - z*ty), v[1] + w*ty + (z*tx - x*tz), v[2] + w*tz + (x*ty - y*tx)];
+}
+const qangleDeg = q => 2 * Math.acos(Math.min(1, Math.abs(q[3]))) * 180 / Math.PI;
+
+// ── Stream ───────────────────────────────────────────────────────────────
+const es = new EventSource("/stream");
+const groupSelect = document.getElementById("group");
+es.onmessage = e => {
+  try {
+    latest = JSON.parse(e.data);
+    lastMsgAt = performance.now();
+    refreshStreamControls();
+  } catch (error) {
+    document.getElementById("statusText").textContent = `invalid visualizer data: ${error.message}`;
+  }
+};
+es.onerror = () => { document.getElementById("statusText").textContent = "lost connection to visualizer server, retrying…"; };
+
+function resetMotionHistory() {
+  trails = Object.fromEntries(sensors.map(s => [s.id, []]));
+  lastT = {};
+}
+
+function refreshStreamControls() {
+  const groups = latest && latest.groups ? latest.groups : {};
+  renderRecording(latest && latest.recording);
+  const groupNames = Object.keys(groups);
+  const currentNames = Array.from(groupSelect.options).map(option => option.value).filter(Boolean);
+  if (groupNames.join("\0") !== currentNames.join("\0")) {
+    const previous = groupSelect.value;
+    groupSelect.replaceChildren();
+    for (const name of groupNames) {
+      const option = document.createElement("option");
+      option.value = name;
+      option.textContent = name === "default" ? "default (fused)" : name;
+      groupSelect.append(option);
+    }
+    if (!groupNames.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "Waiting for stream…";
+      groupSelect.append(option);
+    } else {
+      groupSelect.value = groupNames.includes(previous)
+        ? previous
+        : groupNames.includes("default") ? "default" : groupNames[0];
+    }
+    resetMotionHistory();
+  }
+
+  const discovered = new Set();
+  for (const group of Object.values(groups)) {
+    for (const [target, streams] of Object.entries(group.s || {})) {
+      if (target !== "hub" && streams["TRANSFORM@hub"]) discovered.add(target);
+    }
+  }
+  const ids = [
+    ...SENSOR_ORDER.filter(id => discovered.has(id)),
+    ...Array.from(discovered).filter(id => !SENSOR_INFO[id]).sort(),
+  ];
+  if (ids.join("\0") !== sensors.map(s => s.id).join("\0")) {
+    sensors = ids.map((id, index) => {
+      const info = SENSOR_INFO[id] || {};
+      return {
+        id,
+        label: info.label || id.replace(/_sensor$/, "").replace(/_/g, " "),
+        hex: css.getPropertyValue(info.color || SENSOR_COLORS[index % SENSOR_COLORS.length]).trim(),
+      };
+    });
+    buildRows(bendsEl);
+    buildRows(residEl);
+    resetMotionHistory();
+  }
+}
+
+groupSelect.addEventListener("change", resetMotionHistory);
+document.getElementById("world").addEventListener("change", resetMotionHistory);
+
+const recordingLabel = document.getElementById("recordingLabel");
+const recordStart = document.getElementById("recordStart");
+const recordStop = document.getElementById("recordStop");
+const recordingStatus = document.getElementById("recordingStatus");
+
+function renderRecording(recording) {
+  const active = !!(recording && recording.active);
+  recordStart.disabled = active || !latest || !latest.status.startsWith("streaming");
+  recordStop.disabled = !active;
+  recordingLabel.disabled = active;
+  if (active) {
+    recordingStatus.textContent = `Recording "${recording.label}" · ${recording.frames} RGMP frames`;
+  } else if (recording && recording.error) {
+    recordingStatus.textContent = recording.error;
+  } else if (recording && recording.file) {
+    recordingStatus.textContent = `Saved ${recording.file} · ${recording.frames} RGMP frames`;
+  } else {
+    recordingStatus.textContent = "Not recording";
+  }
+}
+
+async function recordingRequest(path, body) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || `Request failed (${response.status})`);
+  renderRecording(result.recording);
+}
+
+recordStart.addEventListener("click", async () => {
+  try {
+    await recordingRequest("/api/recording/start", { label: recordingLabel.value });
+  } catch (error) {
+    recordingStatus.textContent = error.message;
+  }
+});
+recordStop.addEventListener("click", async () => {
+  try {
+    await recordingRequest("/api/recording/stop");
+  } catch (error) {
+    recordingStatus.textContent = error.message;
+  }
+});
+
+// ── Camera ───────────────────────────────────────────────────────────────
+// Hub frame: +Y toward wrist, -Y toward fingers, +Z palm side. Screen "up" = -Z (back of hand).
+const DEFAULT_CAM = { yaw: 0.5, pitch: 0.6, dist: 0.38 };
+const cam = { ...DEFAULT_CAM };
+const canvas = document.getElementById("c"), ctx = canvas.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  const r = canvas.getBoundingClientRect();
+  W = r.width; H = r.height;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+new ResizeObserver(resize).observe(canvas);
+
+let drag = null;
+canvas.addEventListener("pointerdown", e => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointermove", e => {
+  if (!drag) return;
+  cam.yaw += (e.clientX - drag.x) * 0.008;
+  cam.pitch = Math.max(-1.5, Math.min(1.5, cam.pitch + (e.clientY - drag.y) * 0.008));
+  drag = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener("pointerup", () => drag = null);
+canvas.addEventListener("wheel", e => { e.preventDefault(); cam.dist = Math.max(0.12, Math.min(1.5, cam.dist * Math.exp(e.deltaY * 0.001))); }, { passive: false });
+const resetView = () => Object.assign(cam, DEFAULT_CAM);
+canvas.addEventListener("dblclick", resetView);
+document.getElementById("reset").onclick = resetView;
+const CENTER = [0, -0.01, 0.02];
+
+function project(p) {
+  // hub coords -> view coords (X right, Y up, Z toward camera at start)
+  let X = p[0] - CENTER[0], Y = -(p[2] - CENTER[2]), Z = p[1] - CENTER[1];
+  const cy = Math.cos(cam.yaw), sy = Math.sin(cam.yaw);
+  [X, Z] = [X*cy + Z*sy, -X*sy + Z*cy];
+  const cp = Math.cos(cam.pitch), sp = Math.sin(cam.pitch);
+  [Y, Z] = [Y*cp - Z*sp, Y*sp + Z*cp];
+  const depth = Math.max(0.02, cam.dist - Z);
+  const f = Math.min(W, H) * 1.5 / depth;
+  return { x: W/2 + X*f, y: H/2 - Y*f, s: f, depth };
+}
+
+// ── Drawing ──────────────────────────────────────────────────────────────
+function line(a, b, color, width, alpha = 1) {
+  const A = project(a), B = project(b);
+  ctx.globalAlpha = alpha; ctx.strokeStyle = color; ctx.lineWidth = width;
+  ctx.beginPath(); ctx.moveTo(A.x, A.y); ctx.lineTo(B.x, B.y); ctx.stroke(); ctx.globalAlpha = 1;
+}
+
+function drawGrid(hubQ) {
+  // Reference plane through the hub (back of the hand), 2 cm grid.
+  const map = p => hubQ ? qrot(hubQ, p) : p;
+  for (let i = -6; i <= 6; i++) {
+    const v = i * 0.02;
+    line(map([v, -0.12, 0]), map([v, 0.12, 0]), "#2a2f3a", 1);
+    line(map([-0.12, v, 0]), map([0.12, v, 0]), "#2a2f3a", 1);
+  }
+}
+
+function drawAxes(p, q, len) {
+  const cols = ["#e5484d", "#4fd18b", "#4aa8ff"];
+  [[1,0,0],[0,1,0],[0,0,1]].forEach((axis, i) => {
+    const d = qrot(q, axis);
+    line(p, [p[0] + d[0]*len, p[1] + d[1]*len, p[2] + d[2]*len], cols[i], 1.5, 0.85);
+  });
+}
+
+function frame() {
+  requestAnimationFrame(frame);
+  if (!W) return;
+  ctx.clearRect(0, 0, W, H);
+
+  const groupName = groupSelect.value;
+  const world = document.getElementById("world").checked;
+  const showTrails = document.getElementById("trails").checked;
+  const showAxes = document.getElementById("axes").checked;
+  const g = latest && latest.groups[groupName];
+  const hubOri = latest && Object.values(latest.groups).map(group =>
+    group.s && group.s.hub && group.s.hub["ORIENTATION@LTP_NED"]
+  ).find(Boolean);
+  const hubQ = world && hubOri ? hubOri : null;
+
+  drawGrid(hubQ);
+
+  if (!g || g.t === null) {
+    ctx.fillStyle = "#8b93a3"; ctx.font = "14px system-ui"; ctx.textAlign = "center";
+    ctx.fillText("Waiting for glove data…", W/2, H/2);
+    return;
+  }
+
+  const fresh = lastT[groupName] !== g.t;
+  lastT[groupName] = g.t;
+
+  // Collect sensor poses in display frame.
+  const poses = [];
+  for (const s of sensors) {
+    const T = g.s[s.id] && g.s[s.id]["TRANSFORM@hub"];
+    if (!T) continue;
+    let p = T.slice(0, 3), q = T.slice(3, 7);
+    if (hubQ) { p = qrot(hubQ, p); q = qmul(hubQ, q); }
+    poses.push({ s, p, q });
+    if (fresh) { const tr = trails[s.id]; tr.push(p); if (tr.length > TRAIL_LEN) tr.shift(); }
+  }
+
+  const origin = [0, 0, 0];
+  // Hub
+  const H0 = project(origin);
+  ctx.fillStyle = "#e6e8ec"; ctx.beginPath(); ctx.arc(H0.x, H0.y, Math.max(3, H0.s * 0.006), 0, 7); ctx.fill();
+  if (showAxes && hubQ) drawAxes(origin, hubQ, 0.03);
+
+  // Far-to-near so nearer sensors draw on top.
+  poses.sort((a, b) => project(b.p).depth - project(a.p).depth);
+  for (const { s, p, q } of poses) {
+    if (showTrails) {
+      const tr = trails[s.id];
+      for (let i = 1; i < tr.length; i++) line(tr[i-1], tr[i], s.hex, 2, (i / tr.length) * 0.6);
+    }
+    line(origin, p, s.hex, 2.5, 0.55);
+    if (showAxes) drawAxes(p, q, 0.015);
+    const P = project(p);
+    ctx.fillStyle = s.hex; ctx.beginPath(); ctx.arc(P.x, P.y, Math.max(4, P.s * 0.007), 0, 7); ctx.fill();
+    ctx.fillStyle = "#e6e8ec"; ctx.font = "12px system-ui"; ctx.textAlign = "left";
+    ctx.fillText(s.label, P.x + 9, P.y - 7);
+  }
+}
+requestAnimationFrame(frame);
+
+// ── Side panel (10 Hz) ───────────────────────────────────────────────────
+function buildRows(el) {
+  const fragment = document.createDocumentFragment();
+  for (const s of sensors) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.dataset.id = s.id;
+
+    const name = document.createElement("div");
+    name.className = "name";
+    const swatch = document.createElement("span");
+    swatch.className = "sw";
+    swatch.style.background = s.hex;
+    const label = document.createElement("span");
+    label.textContent = s.label;
+    name.append(swatch, label);
+
+    const bar = document.createElement("div");
+    bar.className = "bar";
+    const fill = document.createElement("i");
+    fill.style.background = s.hex;
+    bar.append(fill);
+
+    const value = document.createElement("div");
+    value.className = "num";
+    value.textContent = "–";
+    row.append(name, bar, value);
+    fragment.append(row);
+  }
+  el.replaceChildren(fragment);
+}
+const bendsEl = document.getElementById("bends"), residEl = document.getElementById("resid");
+buildRows(bendsEl);
+buildRows(residEl);
+
+function setRow(el, id, frac, text, warn) {
+  const row = Array.from(el.children).find(child => child.dataset.id === id);
+  if (!row) return;
+  row.querySelector("i").style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
+  const n = row.querySelector(".num"); n.textContent = text; n.classList.toggle("flagbad", !!warn);
+}
+
+setInterval(() => {
+  const st = document.getElementById("status");
+  const live = latest && performance.now() - lastMsgAt < 1500 && latest.status.startsWith("streaming");
+  st.classList.toggle("live", !!live);
+  if (latest) document.getElementById("statusText").textContent = latest.status;
+  if (!latest) return;
+
+  const g = latest.groups[groupSelect.value];
+  for (const s of sensors) {
+    const T = g && g.s[s.id] && g.s[s.id]["TRANSFORM@hub"];
+    if (T) { const a = qangleDeg(T.slice(3, 7)); setRow(bendsEl, s.id, a / 120, `${a.toFixed(0)}°`); }
+    else setRow(bendsEl, s.id, 0, "–");
+
+    const residualGroup = Object.values(latest.groups).find(group =>
+      group.s && group.s[s.id] && group.s[s.id]["CUSTOM@hub:relative_emf_residual"]
+    );
+    const r = residualGroup && residualGroup.s[s.id]["CUSTOM@hub:relative_emf_residual"];
+    if (r) setRow(residEl, s.id, r[0] / 10, r[0].toFixed(1), r[0] > 5);
+    else setRow(residEl, s.id, 0, "–");
+  }
+  const rates = Object.entries(latest.rates || {}).map(([k, v]) => `${k} ${v} Hz`).join(" · ");
+  document.getElementById("rates").textContent = (latest.device_id ? `device ${latest.device_id} · ` : "") + rates;
+}, 100);
+</script>
+</body>
+</html>
