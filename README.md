@@ -1,4 +1,4 @@
-# Junction2026
+# Gloggi (Tactile Music)
 
 Live Rokoko glove capture and gesture-learning starter for the Junction 2026
 hackathon. The project can visualize a Rokoko Device SDK stream, record
