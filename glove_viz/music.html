@@ -83,12 +83,13 @@
   .help { color: var(--muted); font-size: 12px; margin-top: 12px; }
   .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; flex: 1; }
   @media (max-width: 1150px) { .controls { grid-template-columns: repeat(2, 1fr); } }
-  .ctl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .ctl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; position: relative; }
   .ctl.active { border-color: var(--accent); background: #1f3a2c; }
-  .ctlhead { display: flex; align-items: center; gap: 8px; min-height: 50px; }
-  .ctlhead .hands { display: flex; flex: none; }
+  .ctlhead { display: flex; align-items: center; min-height: 30px; }
+  .ctl .hands { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; pointer-events: none; }
+  .ctl:not(.wide) .opts { padding-right: 50px; }     /* keep the option highlight clear of the hand */
   .cname { font-size: 15px; font-weight: 700; }
-  .ends .cval { align-self: flex-end; text-align: right; font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ends .cval { font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .meterwrap { display: flex; gap: 8px; flex: 1; min-height: 150px; }
   .meter { position: relative; width: 34px; background: #232733; border-radius: 6px; overflow: hidden; cursor: pointer; touch-action: none; }
   .meter > i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--muted); }
@@ -832,13 +833,13 @@ function renderChords() {
 // ── Left-hand settings panel ─────────────────────────────────────────────
 function buildControls() {
   $("controls").innerHTML = CONTROLS.map((c, i) => {
-    const hands = handSVG(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), 40, `Left hand: ${COUNT_LABELS[i]} up`, true)
-      + (i === 3 ? handSVG(upOnly([1, 2, 3, 4]), 40, "Left hand: four fingers up, thumb tucked", true) : "");
+    const hands = handSVG(upOnly([0, 1, 2, 3, 4].slice(0, i + 1)), 46, `Left hand: ${COUNT_LABELS[i]} up`, true)
+      + (i === 3 ? handSVG(upOnly([1, 2, 3, 4]), 46, "Left hand: four fingers up, thumb tucked", true) : "");
     const body = c.type === "range"
       ? `<div class="meterwrap"><div class="meter" data-key="${c.key}"><i></i><b></b></div><div class="ends"><span>▲ ${c.ends[0]}</span><span class="cval"></span><span>▼ ${c.ends[1]}</span></div></div>`
       : `<div class="opts">${c.options.map(o => `<div class="opt" data-key="${c.key}" data-v="${o.id}">${o.label}</div>`).join("")}</div>`
         + (c.twist ? `<div class="sus">${[c.twist.left, c.twist.centre, c.twist.right].map((v, j) => `<div class="opt" data-key="${c.twist.key}" data-v="${v}">${c.twist.labels[j]}</div>`).join("")}</div>` : "");
-    return `<div class="ctl" id="ctl${i}"><div class="ctlhead"><div class="hands">${hands}</div><div class="cname">${i + 1}: ${c.label}</div></div>${body}<div class="hint"></div></div>`;
+    return `<div class="ctl${i === 3 ? " wide" : ""}" id="ctl${i}"><div class="ctlhead"><div class="cname">${i + 1}: ${c.label}</div></div>${body}<div class="hint"></div><div class="hands">${hands}</div></div>`;
   }).join("");
   $("controls").querySelectorAll(".opt").forEach(el => el.onclick = () => {
     const key = el.dataset.key;
