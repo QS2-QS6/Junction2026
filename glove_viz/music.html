@@ -17,8 +17,8 @@
   .side { position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 20px 0 20px 20px; display: flex; flex-direction: column; gap: 10px; }
   .side .panel { padding: 12px; flex: none; }
   .side h2 { margin-bottom: 8px; }
-  .side .simbox { display: flex; flex-direction: column; height: 176px; }
-  .side .vizbox { flex: 1; min-height: 50px; display: flex; }
+  .side .vizbox { height: 90px; display: flex; }
+  .side .mapbox { flex: 1; min-height: 170px; display: flex; flex-direction: column; }   /* takes the spare height */
   .canvasbox { position: relative; flex: 1; min-height: 0; }
   .canvasbox canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
   .wrap { padding: 20px 20px 20px 16px; min-width: 0; min-height: 100vh; display: flex; flex-direction: column; gap: 16px; justify-content: space-between; }
@@ -113,8 +113,10 @@
   .handname:first-child { margin-top: 0; }
   #fingers { display: grid; grid-template-columns: 1fr 1fr; gap: 0 22px; }
   @media (max-width: 480px) { #fingers { grid-template-columns: 1fr; } }
-  .poses { display: flex; justify-content: space-around; }
+  .poses { flex: 1; min-height: 0; display: flex; align-items: stretch; gap: 6px; }
   .poses > div { transition: opacity .2s; }
+  .poses > div:not(.canvasbox) { flex: 0 0 36%; min-width: 0; }
+  .poses svg.hand { width: 100%; height: 100%; }
   kbd { background: var(--card); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 11px; }
 </style>
 </head>
@@ -127,13 +129,9 @@
       <label class="inline"><span>Scale</span><select id="scale"></select></label>
     </div>
     <div class="panel vizbox"><div class="canvasbox"><canvas id="viz"></canvas></div></div>
-    <div class="panel">
-      <h2>Hand pose</h2>
-      <div class="poses"><div id="poseleft"></div><div id="poseright"></div></div>
-    </div>
-    <div class="panel simbox">
+    <div class="panel mapbox">
       <h2>Input map</h2>
-      <div class="canvasbox"><canvas id="sim"></canvas></div>
+      <div class="poses"><div id="poseleft"></div><div class="canvasbox"><canvas id="sim"></canvas></div><div id="poseright"></div></div>
     </div>
     <div class="panel">
       <h2>Detected input</h2>
