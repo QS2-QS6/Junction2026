@@ -50,7 +50,7 @@
   .now .name { font-size: 20px; margin-top: 8px; color: var(--muted); white-space: nowrap; }
   .now.idle .roman { color: #3a404d; }
   .now.idle .label { text-align: center; }
-  #piano { flex: 1; min-width: 0; position: relative; height: clamp(100px, 12.5vh, 162px); }
+  #piano { flex: 1; min-width: 0; position: relative; align-self: stretch; min-height: 90px; }
   #piano svg { position: absolute; inset: 0; width: 100%; height: 100%; }
   #piano .wk { fill: var(--muted); }
   #piano .bk { fill: #12141a; }
@@ -59,14 +59,13 @@
   @media (max-width: 620px) { .now { flex-direction: column; align-items: stretch; } }
 
   .chords { display: grid; grid-template-columns: repeat(8, 1fr); gap: 8px; flex: 1; }
-  .wrap > #rhBox { flex: 1; display: flex; flex-direction: column; min-height: 250px; }
-  .chords, .chord { min-height: 0; }
+  .wrap > .now { flex: 1; min-height: 130px; }       /* the keyboard takes whatever height is left */
   @media (max-width: 680px) { .chords { grid-template-columns: repeat(4, 1fr); } }
   .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 6px 8px; text-align: center; cursor: pointer; user-select: none; display: flex; flex-direction: column; transition: background .06s, border-color .06s; }
   .chord .r { font-size: 30px; line-height: 1.2; font-weight: 700; }
   .chord .n { font-size: 15px; color: var(--muted); }
   .chord .who { margin-top: 6px; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
-  .chord .who svg { flex: 1 1 0; min-height: 0; width: 100%; height: auto; }   /* as big as the card allows; two share the height */
+  .chord .who svg { flex: none; width: min(var(--hand, 60px), 100%); height: auto; }   /* same size as the left-hand cards' hands */
   svg.hand { display: block; flex: none; }
   .chord.active { background: #1f3a2c; border-color: var(--accent); }
 
@@ -1024,7 +1023,13 @@ function drawPiano() {
 }
 (function frame() { requestAnimationFrame(frame); drawViz(); drawSim(); drawPiano(); })();
 
-buildControls(); buildPiano(); renderChords(); renderNow(null);
+buildControls(); buildPiano();
+// Right-hand pictograms are drawn at the size the left-hand cards' hands come out at.
+new ResizeObserver(() => {
+  const w = document.querySelector("#controls .hands svg").getBoundingClientRect().width;
+  if (w) document.documentElement.style.setProperty("--hand", w + "px");
+}).observe($("controls"));
+ renderChords(); renderNow(null);
 </script>
 </body>
 </html>
