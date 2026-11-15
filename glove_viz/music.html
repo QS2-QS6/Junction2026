@@ -64,7 +64,7 @@
   .chord { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 6px 12px; text-align: center; cursor: pointer; user-select: none; display: flex; flex-direction: column; justify-content: center; transition: background .06s, border-color .06s; }
   .chord .r { font-size: 30px; line-height: 1.2; font-weight: 700; }
   .chord .n { font-size: 15px; color: var(--muted); }
-  .chord .who { margin-top: 8px; min-height: 51px; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
+  .chord .who { margin-top: 8px; min-height: 58px; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; }
   svg.hand { display: block; flex: none; }
   .chord.active { background: #1f3a2c; border-color: var(--accent); }
 
@@ -83,13 +83,14 @@
   .help { color: var(--muted); font-size: 12px; margin-top: 12px; }
   .controls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; flex: 1; }
   @media (max-width: 1150px) { .controls { grid-template-columns: repeat(2, 1fr); } }
-  .ctl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; position: relative; }
+  .ctl { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; position: relative; container-type: inline-size; }
   .ctl.active { border-color: var(--accent); background: #1f3a2c; }
   .ctlhead { display: flex; align-items: center; min-height: 30px; }
   .ctl .hands { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column-reverse; gap: 4px; pointer-events: none; }
-  .ctl .opts { padding-right: 64px; }     /* keep the option highlight clear of the hand */
+  .ctl .hands svg { width: 38cqw; height: auto; }      /* as large as the card allows next to its text */
+  .ctl .opts { padding-right: calc(38cqw + 4px); }     /* keep the option highlight clear of the hand */
   .cname { font-size: 15px; font-weight: 700; }
-  .ends .cval { font-size: 18px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .ends .cval { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .meterwrap { display: flex; gap: 8px; flex: 1; min-height: 150px; }
   .meter { position: relative; width: 34px; background: #232733; border-radius: 6px; overflow: hidden; cursor: pointer; touch-action: none; }
   .meter > i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--muted); }
@@ -815,7 +816,7 @@ function gesturesFor(deg) {
   ];
 }
 function whoPlays(deg) {
-  return gesturesFor(deg).map(g => handSVG(g.up, 46, g.title)).join("");
+  return gesturesFor(deg).map(g => handSVG(g.up, 52, g.title)).join("");
 }
 
 function renderChords() {
