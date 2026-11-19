@@ -5,6 +5,11 @@ hackathon. The project can visualize a Rokoko Device SDK stream, record
 timestamped/labeled demonstrations, import them into Tiger Data (TimescaleDB),
 and train a small gesture classifier locally or on Verda GPU compute.
 
+
+https://github.com/user-attachments/assets/0611d0b6-1b7b-4c7a-8b8a-12f819954b1f
+
+
+
 ## Requirements
 
 - Windows 10 version 1903 or later (x64)
